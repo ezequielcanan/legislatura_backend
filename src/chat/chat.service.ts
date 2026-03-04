@@ -22,22 +22,24 @@ export class ChatService {
     private memoryService: MemoryService,
     private ragService: RagService,
   ) {
-    this.systemPrompt = `Eres un asistente AI especializado en documentos oficiales y normas del Gobierno de la Ciudad de Buenos Aires.
+    this.systemPrompt = `Eres un asistente AI especializado en la Legislatura de la Ciudad Autónoma de Buenos Aires.
 
 CAPACIDADES:
-1. Analizar y explicar documentos oficiales (decretos, resoluciones, disposiciones)
-2. Recordar contexto e información personal del usuario
-3. Proporcionar respuestas basadas en fuentes oficiales verificables
+1. Analizar y explicar expedientes legislativos (proyectos de ley, resoluciones, declaraciones, comunicaciones)
+2. Proporcionar información sobre legisladores, bloques políticos y comisiones
+3. Recordar contexto e información de conversaciones anteriores
+4. Responder consultas basándote en fuentes legislativas verificables
 
 DIRECTRICES:
-1. **Prioriza información de documentos oficiales** cuando estén disponibles
-2. Cita específicamente los documentos que uses (nombre, número, área)
-3. Proporciona URLs para verificación
+1. **Prioriza información de expedientes legislativos** cuando estén disponibles
+2. Cita específicamente los expedientes por su número (ej: "Expediente 1234-D-2024")
+3. Sé preciso con la información de legisladores y sus bloques
 4. Sé empático y natural en el tono
 5. Si no tienes información oficial, indícalo claramente
 6. Mantén un tono profesional pero accesible
+7. Cuando menciones proyectos, incluye su tipo, estado y autores si están disponibles
 
-DOCUMENTOS RELEVANTES:
+EXPEDIENTES LEGISLATIVOS RELEVANTES:
 {documents}`;
   }
 
@@ -54,10 +56,16 @@ DOCUMENTOS RELEVANTES:
   ) {
     const { model, temperature, maxTokens, stream = true } = options;
 
-    // 1. Generar embedding del mensaje
-    const qVec = await this.openRouterService.generateEmbedding(text);
+    // 1. Classify query to extract structured filters (intelligent RAG)
+    const classification = await this.agentService.classifyQuery(text);
+    //this.logger.debug(`Query classified: intent=${classification.intent}`);
 
-    // 2. Guardar mensaje del usuario
+    // 2. Generate embedding of the user message
+    const qVec = await this.openRouterService.generateEmbedding(
+      classification.refinedQuery || text,
+    );
+
+    // 3. Save user message
     const userMessage = await this.messageService.createMessage(
       userId,
       {
@@ -68,11 +76,18 @@ DOCUMENTOS RELEVANTES:
       qVec,
     );
 
-    // 3. **RAG: Buscar documentos relevantes**
+    // 4. **RAG: Search relevant expedientes with intelligent filtering**
+    const ragFilters: any = {};
+    if (classification.tags.length > 0) ragFilters.aiCategory = classification.tags[0];
+    //if (classification.tags.length > 0) ragFilters.tags = classification.tags;
+    if (classification.categories.length > 0) ragFilters.categories = classification.categories;
+    if (classification.tipo) ragFilters.tipo = classification.tipo;
+
     const relevantDocuments = await this.ragService.searchRelevantDocuments(
-      text,
+      classification.refinedQuery || text,
       qVec,
-      50, // Top 5 documentos más relevantes
+      50,
+      ragFilters,
     );
 
     
@@ -86,6 +101,8 @@ DOCUMENTOS RELEVANTES:
       10,
     );
 
+    //console.log(contextMessages)
+
     // 6. Preparar mensajes para el LLM con contexto RAG
     const messages = this.buildMessagesWithContext(
       text,
@@ -93,10 +110,16 @@ DOCUMENTOS RELEVANTES:
       documentsContext,
     );
 
+    //console.log(messages)
+
 
     if (stream) {
       // Stream de respuesta
-      const streamObservable = this.agentService.createStream(messages, userId);
+      const streamObservable = this.openRouterService.createChatCompletionStream(messages, {
+        model,
+        temperature,
+        max_tokens: maxTokens,
+      });
 
       return {
         stream: streamObservable,
@@ -124,8 +147,8 @@ DOCUMENTOS RELEVANTES:
           tokenCount: response.usage?.total_tokens,
           finishReason: response.choices[0].finish_reason,
           relevantDocuments: relevantDocuments.map((d) => ({
-            idNorma: d.idNorma,
-            name: d.documentName,
+            expedienteId: d.expedienteId,
+            numero: d.numero,
             similarity: d.similarity,
           })),
         },
@@ -145,7 +168,12 @@ DOCUMENTOS RELEVANTES:
     contextMessages: any[],
     documentsContext: string,
   ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-    const reversedMessages = [...contextMessages].reverse();
+    // Filtrar el mensaje actual del contexto si ya está incluido (evitar duplicados)
+    const filteredContext = contextMessages.filter(
+      msg => msg.role !== MessageRole.USER || msg.text !== currentMessage
+    );
+    
+    const reversedMessages = [...filteredContext].reverse();
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 

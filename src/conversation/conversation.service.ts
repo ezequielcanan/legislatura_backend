@@ -66,6 +66,12 @@ export class ConversationService {
     conversationId: string,
     userId: Types.ObjectId,
   ): Promise<ConversationDocument> {
+    // Validar que el conversationId sea un ObjectId válido
+    if (!Types.ObjectId.isValid(conversationId)) {
+      this.logger.warn(`Invalid conversation ID format: ${conversationId}`);
+      throw new NotFoundException('Invalid conversation ID format');
+    }
+
     const conversation = await this.conversationModel.findOne({
       _id: new Types.ObjectId(conversationId),
       userId: new Types.ObjectId(userId),
@@ -73,6 +79,7 @@ export class ConversationService {
     }).exec();
 
     if (!conversation) {
+      this.logger.warn(`Conversation not found: ${conversationId} for user: ${userId}`);
       throw new NotFoundException('Conversation not found');
     }
 
@@ -85,7 +92,7 @@ export class ConversationService {
     dto: UpdateConversationDto,
   ): Promise<ConversationDocument> {
     const conversation = await this.conversationModel.findOneAndUpdate(
-      { _id: conversationId, userId },
+      { _id: new Types.ObjectId(conversationId), userId: new Types.ObjectId(userId) },
       {
         ...dto,
         ...(dto.title || dto.status ? { lastActivityAt: new Date() } : {}),

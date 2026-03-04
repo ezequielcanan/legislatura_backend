@@ -14,8 +14,18 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Security middleware
-  app.use(helmet());
-  app.use(compression());
+  app.use(helmet({
+    crossOriginResourcePolicy: false,
+  }));
+  app.use(compression({
+    filter: (req, res) => {
+      // No comprimir respuestas SSE (text/event-stream) para permitir streaming real
+      if (res.getHeader('Content-Type') === 'text/event-stream') {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  }));
   app.use(cookieParser());
 
   // CORS configuration

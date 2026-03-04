@@ -23,6 +23,7 @@ export class QueueModule {
 
     return {
       module: QueueModule,
+      global: true,
       providers: [
         ...providers,
         { provide: 'REDIS_CONNECTION_OPTS', useValue: redisOpts },

@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { HttpModule } from '@nestjs/axios';
 import { Embedding, EmbeddingSchema } from '../embedding/schema/embedding.schema';
-import { Document, DocumentSchema } from '../documents/schema/document.schema';
+import { Expediente, ExpedienteSchema } from '../legislatura/schema/expediente.schema';
 import { RagService } from './rag.service';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 
@@ -11,7 +11,7 @@ import { OpenRouterService } from '../openrouter/openrouter.service';
   imports: [
     MongooseModule.forFeature([
       { name: Embedding.name, schema: EmbeddingSchema },
-      { name: Document.name, schema: DocumentSchema },
+      { name: Expediente.name, schema: ExpedienteSchema },
     ]),
     HttpModule,
   ],

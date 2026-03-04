@@ -177,8 +177,9 @@ export class OpenRouterService {
                   if (parsed.choices?.[0]?.delta?.content) {
                     subscriber.next(parsed.choices[0].delta.content);
                   }
+                  // Finish reason no se envía como contenido, solo completa el stream
                   if (parsed.choices?.[0]?.finish_reason) {
-                    subscriber.next(`\n[FINISH_REASON:${parsed.choices[0].finish_reason}]`);
+                    // El stream se completará cuando llegue [DONE]
                   }
                 } catch (error) {
                   this.logger.warn('Failed to parse stream data:', error);

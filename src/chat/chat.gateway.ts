@@ -149,11 +149,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  private sanitizeChunk(raw: string) {
-    // elimina marcas tipo [FINISH_REASON:stop] u otras variantes entre corchetes
-    return raw.replace(/\[FINISH_REASON:[^\]]+\]/g, '')
-  }
-
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
@@ -193,9 +188,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       stream.subscribe({
         next: (chunk: string) => {
-          const sanitizedChunk = this.sanitizeChunk(chunk);
-          if (!sanitizedChunk) return
-          fullResponse += sanitizedChunk
+          fullResponse += chunk;
 
           client.emit('chunk', {
             chunk,
@@ -213,17 +206,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         },
         complete: async () => {
           try {
-            const finalResponse = this.sanitizeChunk(fullResponse);
             await this.chatService.continueStreamResponse(
               conversationId,
               new Types.ObjectId(userId),
               (result as any).userMessageId,
-              finalResponse,
+              fullResponse,
             );
 
             client.emit('streamComplete', {
               conversationId,
-              fullResponse: finalResponse.trim(),
+              fullResponse: fullResponse.trim(),
               messageId: (result as any).userMessageId,
             });
 

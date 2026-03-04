@@ -1,24 +1,26 @@
 // src/rag/rag.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Embedding, EmbeddingDocument, EmbeddingSourceType } from '../embedding/schema/embedding.schema';
-import { Document, DocumentDocument } from '../documents/schema/document.schema';
+import { Expediente, ExpedienteDocument } from '../legislatura/schema/expediente.schema';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 import { ConfigService } from '@nestjs/config';
 
-export interface DocumentChunk {
+export interface ExpedienteChunk {
   content: string;
-  documentId: string;
-  idNorma: number;
-  documentName: string;
-  documentSummary: string;
-  area: string;
-  type: string;
+  expedienteId: number;
+  expedienteDbId: string;
+  numero: string;
+  titulo: string;
+  sumario: string;
+  tipo: string;
+  aiTags: string[];
+  aiCategory: string;
+  aiSummary: string;
   chunkIndex: number;
   totalChunks: number;
   similarity: number;
-  url: string;
 }
 
 @Injectable()
@@ -29,32 +31,38 @@ export class RagService {
 
   constructor(
     @InjectModel(Embedding.name) private embeddingModel: Model<EmbeddingDocument>,
-    @InjectModel(Document.name) private documentModel: Model<DocumentDocument>,
+    @InjectModel(Expediente.name) private expedienteModel: Model<ExpedienteDocument>,
     private openRouterService: OpenRouterService,
     private configService: ConfigService,
   ) {
     this.similarityThreshold = Number(
-      this.configService.get<number>('RAG_SIMILARITY_THRESHOLD', 0.75)
+      this.configService.get<number>('RAG_SIMILARITY_THRESHOLD', 0.72)
     );
   }
 
   /**
-   * Busca documentos relevantes basados en una consulta
+   * Search relevant expediente chunks based on a query, with optional tag/category pre-filtering
    */
   async searchRelevantDocuments(
     queryText: string,
     queryVector: number[],
     limit: number = 5,
-  ): Promise<DocumentChunk[]> {
+    filters?: {
+      tags?: string[];
+      categories?: string[];
+      tipo?: string;
+    },
+  ): Promise<ExpedienteChunk[]> {
     if (!queryText || queryText.trim().length === 0) {
       return [];
     }
 
     try {
-      // 1. Buscar embeddings similares de documentos
+      // 1. Find nearby embeddings (optionally pre-filtered by metadata tags)
       const nearbyEmbeddings = await this._findNearbyDocumentEmbeddings(
         queryVector,
-        this.maxCandidates
+        this.maxCandidates,
+        filters,
       );
 
       if (nearbyEmbeddings.length === 0) {
@@ -62,11 +70,8 @@ export class RagService {
         return [];
       }
 
-      // 2. Calcular similitud y filtrar
-      const scoredChunks: Array<{
-        embedding: EmbeddingDocument;
-        similarity: number;
-      }> = nearbyEmbeddings
+      // 2. Score and filter by similarity
+      const scoredChunks = nearbyEmbeddings
         .map((emb) => ({
           embedding: emb,
           similarity: this._cosineSimilarity(queryVector, emb.vector as number[]),
@@ -80,106 +85,125 @@ export class RagService {
         return [];
       }
 
-      // 3. Obtener información de documentos
-      const documentIds = scoredChunks.map((sc) => sc.embedding.sourceId);
-      const documents = await this.documentModel
-        .find({ _id: { $in: documentIds } })
+      // 3. Get expediente details
+      const expedienteIds = scoredChunks.map((sc) => sc.embedding.sourceId);
+      const expedientes = await this.expedienteModel
+        .find({ _id: { $in: expedienteIds } })
         .lean()
         .exec();
 
-      const docMap = new Map<string, any>();
-      documents.forEach((doc) => {
-        docMap.set(doc._id.toString(), doc);
+      const expMap = new Map<string, any>();
+      expedientes.forEach((exp) => {
+        expMap.set(exp._id.toString(), exp);
       });
 
-      // 4. Construir chunks con metadata completa
-      const chunks: DocumentChunk[] = scoredChunks
+      // 4. Build chunks with full metadata
+      const chunks: ExpedienteChunk[] = scoredChunks
         .map((sc) => {
-          const doc = docMap.get(sc.embedding.sourceId.toString());
-          if (!doc) return null;
+          const exp = expMap.get(sc.embedding.sourceId.toString());
+          if (!exp) return null;
 
           const metadata = sc.embedding.metadata || {};
 
           return {
             content: sc.embedding.snippet || '',
-            documentId: doc._id.toString(),
-            idNorma: doc.idNorma,
-            documentName: doc.nombre,
-            documentSummary: doc.sumario,
-            area: doc.area,
-            type: doc.type,
+            expedienteId: exp.expedienteId,
+            expedienteDbId: exp._id.toString(),
+            numero: exp.numero,
+            titulo: exp.titulo,
+            sumario: exp.sumario,
+            tipo: exp.tipo,
+            aiTags: exp.aiTags || [],
+            aiCategory: exp.aiCategory || '',
+            aiSummary: exp.aiSummary || '',
             chunkIndex: metadata.chunkIndex || 0,
             totalChunks: metadata.totalChunks || 1,
             similarity: sc.similarity,
-            url: doc.urlNorma,
           };
         })
-        .filter(Boolean) as DocumentChunk[];
+        .filter(Boolean) as ExpedienteChunk[];
 
       this.logger.debug(
-        `Found ${chunks.length} relevant document chunks (threshold: ${this.similarityThreshold})`
+        `Found ${chunks.length} relevant expediente chunks (threshold: ${this.similarityThreshold})`
       );
 
       return chunks;
     } catch (error) {
-      this.logger.error('Error searching relevant documents:', error);
+      this.logger.error('Error searching relevant expedientes:', error);
       return [];
     }
   }
 
   /**
-   * Formatea los chunks de documentos para el contexto del LLM
+   * Format expediente chunks for LLM context
    */
-  formatDocumentsForContext(chunks: DocumentChunk[]): string {
+  formatDocumentsForContext(chunks: ExpedienteChunk[]): string {
     if (chunks.length === 0) {
-      return 'No se encontraron documentos relevantes.';
+      return 'No se encontraron expedientes relevantes en la base de datos.';
     }
 
     const formatted = chunks.map((chunk, idx) => {
       return `
-[Documento ${idx + 1}]
-Nombre: ${chunk.documentName}
-Área: ${chunk.area} - ${chunk.type}
-Sumario: ${chunk.documentSummary}
+[Expediente ${idx + 1}]
+Número: ${chunk.numero}
+Título: ${chunk.titulo}
+Tipo: ${chunk.tipo}
+Categoría: ${chunk.aiCategory}
+Tags: ${chunk.aiTags.join(', ')}
+Resumen AI: ${chunk.aiSummary}
 Relevancia: ${(chunk.similarity * 100).toFixed(1)}%
 Contenido: ${chunk.content}
-URL: ${chunk.url}
 ---`;
     });
 
     return `
-DOCUMENTOS OFICIALES RELEVANTES:
+EXPEDIENTES LEGISLATIVOS RELEVANTES:
 ${formatted.join('\n')}
 
 INSTRUCCIONES:
-- Basa tu respuesta principalmente en estos documentos oficiales
-- Cita específicamente los documentos cuando sea relevante
-- Si la información no está en los documentos, indícalo claramente
-- Proporciona las URLs para que el usuario pueda verificar
+- Basa tu respuesta principalmente en estos expedientes legislativos oficiales
+- Cita específicamente los expedientes por su número cuando sea relevante
+- Si la información no está en los expedientes, indícalo claramente
+- Responde en español con tono profesional pero accesible
 `;
   }
 
   /**
-   * Busca embeddings de documentos cercanos al vector query
+   * Find nearby document embeddings, optionally pre-filtered by metadata
    */
   private async _findNearbyDocumentEmbeddings(
     vector: number[],
-    topN: number = 100
+    topN: number = 100,
+    filters?: {
+      tags?: string[];
+      categories?: string[];
+      tipo?: string;
+    },
   ): Promise<EmbeddingDocument[]> {
     try {
-      // Buscar solo embeddings de documentos
+      const query: any = {
+        sourceType: EmbeddingSourceType.DOCUMENT,
+        deleted: { $ne: true },
+      };
+
+      // Apply metadata filters if provided
+      if (filters?.tags && filters.tags.length > 0) {
+        query['metadata.aiTags'] = { $in: filters.tags };
+      }
+      if (filters?.categories && filters.categories.length > 0) {
+        query['metadata.aiCategory'] = { $in: filters.categories };
+      }
+      if (filters?.tipo) {
+        query['metadata.tipo'] = filters.tipo;
+      }
+
       const candidates = await this.embeddingModel
-        .find({
-          sourceType: EmbeddingSourceType.DOCUMENT,
-          deleted: { $ne: true },
-        })
+        .find(query)
         .select({ vector: 1, sourceId: 1, snippet: 1, metadata: 1 })
         .limit(this.maxCandidates)
         .lean()
         .exec();
 
-      // Calcular similitud cliente-lado
-      // En producción, usar MongoDB Atlas Vector Search para mejor rendimiento
       const scored = candidates
         .map((c: any) => {
           if (!c.vector || !Array.isArray(c.vector)) return null;
@@ -200,14 +224,9 @@ INSTRUCCIONES:
     }
   }
 
-  /**
-   * Calcula similitud coseno entre dos vectores
-   */
   private _cosineSimilarity(a: number[], b: number[]): number {
     if (!a || !b || a.length !== b.length) return 0;
-    let dot = 0,
-      na = 0,
-      nb = 0;
+    let dot = 0, na = 0, nb = 0;
     for (let i = 0; i < a.length; i++) {
       dot += a[i] * b[i];
       na += a[i] * a[i];
@@ -217,26 +236,23 @@ INSTRUCCIONES:
     return dot / (Math.sqrt(na) * Math.sqrt(nb));
   }
 
-  /**
-   * Obtiene estadísticas de documentos y embeddings
-   */
   async getStats(): Promise<{
-    totalDocuments: number;
-    processedDocuments: number;
+    totalExpedientes: number;
+    processedExpedientes: number;
     totalEmbeddings: number;
-    averageEmbeddingsPerDoc: number;
+    averageEmbeddingsPerExp: number;
   }> {
-    const [totalDocs, processedDocs, totalEmbs] = await Promise.all([
-      this.documentModel.countDocuments(),
-      this.documentModel.countDocuments({ status: 'completed' }),
+    const [totalExps, processedExps, totalEmbs] = await Promise.all([
+      this.expedienteModel.countDocuments(),
+      this.expedienteModel.countDocuments({ status: 'completed' }),
       this.embeddingModel.countDocuments({ sourceType: EmbeddingSourceType.DOCUMENT }),
     ]);
 
     return {
-      totalDocuments: totalDocs,
-      processedDocuments: processedDocs,
+      totalExpedientes: totalExps,
+      processedExpedientes: processedExps,
       totalEmbeddings: totalEmbs,
-      averageEmbeddingsPerDoc: processedDocs > 0 ? totalEmbs / processedDocs : 0,
+      averageEmbeddingsPerExp: processedExps > 0 ? totalEmbs / processedExps : 0,
     };
   }
 }

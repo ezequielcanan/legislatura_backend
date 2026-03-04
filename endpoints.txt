@@ -1,0 +1,553 @@
+
+
+Endpoints:
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetBloquesCantidades
+Request Method
+POST
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfBloquesCantidades xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <bloquesCantidades>
+    <bloque>Ciudadanos Unidos / UCR</bloque>
+    <bloque_id>125</bloque_id>
+    <bloque_url>bloque/ciudadanosunidosucr</bloque_url>
+    <bloque_total>5</bloque_total>
+    <bloque_percent>8,3</bloque_percent>
+    <bloque_color>#0094c3</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>Confianza y Desarrollo</bloque>
+    <bloque_id>126</bloque_id>
+    <bloque_url>bloque/confianzaydesarrollo</bloque_url>
+    <bloque_total>6</bloque_total>
+    <bloque_percent>10,0</bloque_percent>
+    <bloque_color>#5ab143</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>Frente de Izquierda de los Trabajadores / PO</bloque>
+    <bloque_id>107</bloque_id>
+    <bloque_url>bloque/frentedeizquierdadelostrabajadorespo</bloque_url>
+    <bloque_total>1</bloque_total>
+    <bloque_percent>1,7</bloque_percent>
+    <bloque_color>#BB0C2F</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>Fuerza por Buenos Aires</bloque>
+    <bloque_id>124</bloque_id>
+    <bloque_url>bloque/fuerzaporbuenosaires</bloque_url>
+    <bloque_total>20</bloque_total>
+    <bloque_percent>33,3</bloque_percent>
+    <bloque_color>#a3d9f0</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>La Libertad avanza</bloque>
+    <bloque_id>114</bloque_id>
+    <bloque_url>bloque/lalibertadavanza</bloque_url>
+    <bloque_total>14</bloque_total>
+    <bloque_percent>23,3</bloque_percent>
+    <bloque_color>#909828</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>PTS Frente de Izq-Unidad</bloque>
+    <bloque_id>113</bloque_id>
+    <bloque_url>bloque/ptsfrentedeizqunidad</bloque_url>
+    <bloque_total>1</bloque_total>
+    <bloque_percent>1,7</bloque_percent>
+    <bloque_color>#66030a</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>Transformación</bloque>
+    <bloque_id>127</bloque_id>
+    <bloque_url>bloque/transformación</bloque_url>
+    <bloque_total>1</bloque_total>
+    <bloque_percent>1,7</bloque_percent>
+    <bloque_color>#365f85</bloque_color>
+  </bloquesCantidades>
+  <bloquesCantidades>
+    <bloque>Vamos por más</bloque>
+    <bloque_id>119</bloque_id>
+    <bloque_url>bloque/vamospormás</bloque_url>
+    <bloque_total>12</bloque_total>
+    <bloque_percent>20,0</bloque_percent>
+    <bloque_color>#FFCC00</bloque_color>
+  </bloquesCantidades>
+</ArrayOfBloquesCantidades>
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetDiputadosyCargosActivosNuevo
+Request Method
+POST
+
+Body: id_bloque: 
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfDiputados xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <diputados>
+    <apellido>López</apellido>
+    <nombre>Matías Damián</nombre>
+    <url_legislador>legislador/lópezmatíasdamián</url_legislador>
+    <sexo>MASCULINO</sexo>
+    <bloque>Vamos por más</bloque>
+    <url_bloque>bloque/vamospormás</url_bloque>
+    <id_legislador>30853</id_legislador>
+    <prefijo />
+    <sufijo />
+    <documento>NA</documento>
+    <id_autor>66917</id_autor>
+    <fecha_inicio_mandato>10/12/2023</fecha_inicio_mandato>
+    <fecha_fin_mandato>09/12/2027</fecha_fin_mandato>
+    <fch_desde>10/12/2023 00:00:00</fch_desde>
+    <fch_hasta>9/12/2027 00:00:00</fch_hasta>
+    <foto>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/O_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</foto>
+    <fotoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/S_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</fotoS>
+    <fotoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/M_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</fotoM>
+    <id_sexo>1</id_sexo>
+    <id_bloque>119</id_bloque>
+    <bloque_color>FFCC00</bloque_color>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoM>
+    <id_bloque_cargo_tipo />
+    <cargo_bloque />
+    <reemplaza_a />
+    <id_legislador_reemplazo />
+    <url_legislador_reemplazo />
+    <cargo_recinto>VICEPRESIDENTE PRIMERO</cargo_recinto>
+    <id_cargo_recinto>2</id_cargo_recinto>
+    <orden_cargo>2</orden_cargo>
+  </diputados>
+  <diputados>
+    <apellido>Modarelli</apellido>
+    <nombre>Juan Pablo</nombre>
+    <url_legislador>legislador/modarellijuanpablo</url_legislador>
+    <sexo>MASCULINO</sexo>
+    <bloque>Fuerza por Buenos Aires</bloque>
+    <url_bloque>bloque/fuerzaporbuenosaires</url_bloque>
+    <id_legislador>30892</id_legislador>
+    <prefijo />
+    <sufijo />
+    <documento>NA</documento>
+    <id_autor>67054</id_autor>
+    <fecha_inicio_mandato>10/12/2025</fecha_inicio_mandato>
+    <fecha_fin_mandato>09/12/2029</fecha_fin_mandato>
+    <fch_desde>10/12/2025 00:00:00</fch_desde>
+    <fch_hasta>9/12/2029 00:00:00</fch_hasta>
+    <foto>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/O_a82f4407-f1aa-4767-ad9b-faf3189ef7d5.jpg</foto>
+    <fotoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/S_a82f4407-f1aa-4767-ad9b-faf3189ef7d5.jpg</fotoS>
+    <fotoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/M_a82f4407-f1aa-4767-ad9b-faf3189ef7d5.jpg</fotoM>
+    <id_sexo>1</id_sexo>
+    <id_bloque>124</id_bloque>
+    <bloque_color>a3d9f0</bloque_color>
+    <bloque_logo />
+    <bloque_logoS />
+    <bloque_logoM />
+    <id_bloque_cargo_tipo />
+    <cargo_bloque />
+    <reemplaza_a />
+    <id_legislador_reemplazo />
+    <url_legislador_reemplazo />
+    <cargo_recinto>VICEPRESIDENTE SEGUNDO</cargo_recinto>
+    <id_cargo_recinto>3</id_cargo_recinto>
+    <orden_cargo>3</orden_cargo>
+  </diputados>
+  <diputados>
+    <apellido>Arenaza</apellido>
+    <nombre>Juan Pablo</nombre>
+    <url_legislador>legislador/arenazajuanpablo</url_legislador>
+    <sexo>MASCULINO</sexo>
+    <bloque>La Libertad avanza</bloque>
+    <url_bloque>bloque/lalibertadavanza</url_bloque>
+    <id_legislador>30680</id_legislador>
+    <prefijo />
+    <sufijo />
+    <documento>NA</documento>
+    <id_autor>65646</id_autor>
+    <fecha_inicio_mandato>10/12/2025</fecha_inicio_mandato>
+    <fecha_fin_mandato>09/12/2029</fecha_fin_mandato>
+    <fch_desde>10/12/2025 00:00:00</fch_desde>
+    <fch_hasta>9/12/2029 00:00:00</fch_hasta>
+    <foto>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/O_70e977fe-8bf8-433a-afcc-712868fd2e17.jpg</foto>
+    <fotoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/S_70e977fe-8bf8-433a-afcc-712868fd2e17.jpg</fotoS>
+    <fotoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/M_70e977fe-8bf8-433a-afcc-712868fd2e17.jpg</fotoM>
+    <id_sexo>1</id_sexo>
+    <id_bloque>114</id_bloque>
+    <bloque_color>909828</bloque_color>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logoM>
+    <id_bloque_cargo_tipo />
+    <cargo_bloque />
+    <reemplaza_a />
+    <id_legislador_reemplazo />
+    <url_legislador_reemplazo />
+    <cargo_recinto>VICEPRESIDENTE TERCERO</cargo_recinto>
+    <id_cargo_recinto>4</id_cargo_recinto>
+    <orden_cargo>4</orden_cargo>
+  </diputados>
+  <diputados>
+    <apellido>Alifraco</apellido>
+    <nombre>Edgardo Nestor</nombre>
+    <url_legislador>legislador/alifracoedgardonestor</url_legislador>
+    <sexo>MASCULINO</sexo>
+    <bloque>Confianza y Desarrollo</bloque>
+    <url_bloque>bloque/confianzaydesarrollo</url_bloque>
+    <id_legislador>30922</id_legislador>
+    <prefijo />
+    <sufijo />
+    <documento>NA</documento>
+    <id_autor>67250</id_autor>
+    <fecha_inicio_mandato>10/12/2023</fecha_inicio_mandato>
+    <fecha_fin_mandato>09/12/2027</fecha_fin_mandato>
+    <fch_desde>10/12/2023 00:00:00</fch_desde>
+    <fch_hasta>9/12/2027 00:00:00</fch_hasta>
+    <foto>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/O_28b971a4-e264-4ca5-b5b7-16d0b60dfe04.jpg</foto>
+    <fotoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/S_28b971a4-e264-4ca5-b5b7-16d0b60dfe04.jpg</fotoS>
+    <fotoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/M_28b971a4-e264-4ca5-b5b7-16d0b60dfe04.jpg</fotoM>
+    <id_sexo>1</id_sexo>
+    <id_bloque>126</id_bloque>
+    <bloque_color>5ab143</bloque_color>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logoM>
+    <id_bloque_cargo_tipo />
+    <cargo_bloque />
+    <reemplaza_a />
+    <id_legislador_reemplazo />
+    <url_legislador_reemplazo />
+    <cargo_recinto />
+    <id_cargo_recinto>0</id_cargo_recinto>
+    <orden_cargo />
+  </diputados>
+</ArrayOfDiputados>
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetBloquesActivos
+Request Method
+POST
+
+
+Body: id_bloque: 
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfBloques xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <bloques>
+    <bloque>Ciudadanos Unidos / UCR</bloque>
+    <bloque_id>125</bloque_id>
+    <bloque_url>bloque/ciudadanosunidosucr</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_626f8dc9-379a-4700-b747-0891d8b42656.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_626f8dc9-379a-4700-b747-0891d8b42656.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_626f8dc9-379a-4700-b747-0891d8b42656.jpg</bloque_logoM>
+    <bloque_cantidad>5</bloque_cantidad>
+    <bloque_color>#0094c3</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>Confianza y Desarrollo</bloque>
+    <bloque_id>126</bloque_id>
+    <bloque_url>bloque/confianzaydesarrollo</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_d035d36e-c2df-48ca-bfb2-7ab5c2fccf9d.jpg</bloque_logoM>
+    <bloque_cantidad>6</bloque_cantidad>
+    <bloque_color>#5ab143</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>Frente de Izquierda de los Trabajadores / PO</bloque>
+    <bloque_id>107</bloque_id>
+    <bloque_url>bloque/frentedeizquierdadelostrabajadorespo</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_42642ba2-8412-45ef-bad6-aa601cca6f97.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_42642ba2-8412-45ef-bad6-aa601cca6f97.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_42642ba2-8412-45ef-bad6-aa601cca6f97.jpg</bloque_logoM>
+    <bloque_cantidad>1</bloque_cantidad>
+    <bloque_color>#BB0C2F</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>Fuerza por Buenos Aires</bloque>
+    <bloque_id>124</bloque_id>
+    <bloque_url>bloque/fuerzaporbuenosaires</bloque_url>
+    <bloque_logo />
+    <bloque_logoS />
+    <bloque_logoM />
+    <bloque_cantidad>20</bloque_cantidad>
+    <bloque_color>#a3d9f0</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>La Libertad avanza</bloque>
+    <bloque_id>114</bloque_id>
+    <bloque_url>bloque/lalibertadavanza</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_ea749663-b1a3-49fc-a2db-158154ad0492.jpg</bloque_logoM>
+    <bloque_cantidad>14</bloque_cantidad>
+    <bloque_color>#909828</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>PTS Frente de Izq-Unidad</bloque>
+    <bloque_id>113</bloque_id>
+    <bloque_url>bloque/ptsfrentedeizqunidad</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_037eb022-af39-4bc5-8df4-819e8cb5f469.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_037eb022-af39-4bc5-8df4-819e8cb5f469.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_037eb022-af39-4bc5-8df4-819e8cb5f469.jpg</bloque_logoM>
+    <bloque_cantidad>1</bloque_cantidad>
+    <bloque_color>#66030a</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>Transformación</bloque>
+    <bloque_id>127</bloque_id>
+    <bloque_url>bloque/transformación</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_fd46bd69-3491-4cfe-9977-9ad975534611.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_fd46bd69-3491-4cfe-9977-9ad975534611.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_fd46bd69-3491-4cfe-9977-9ad975534611.jpg</bloque_logoM>
+    <bloque_cantidad>1</bloque_cantidad>
+    <bloque_color>#365f85</bloque_color>
+  </bloques>
+  <bloques>
+    <bloque>Vamos por más</bloque>
+    <bloque_id>119</bloque_id>
+    <bloque_url>bloque/vamospormás</bloque_url>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoM>
+    <bloque_cantidad>12</bloque_cantidad>
+    <bloque_color>#FFCC00</bloque_color>
+  </bloques>
+</ArrayOfBloques>
+
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetDiputadoDatos
+Request Method
+POST
+
+Body: id_legislador: 30853
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfDiputados xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <diputados>
+    <apellido>López</apellido>
+    <nombre>Matías Damián</nombre>
+    <url_legislador>legislador/lópezmatíasdamián</url_legislador>
+    <sexo>MASCULINO</sexo>
+    <bloque>Vamos por más</bloque>
+    <url_bloque>bloque/vamospormás</url_bloque>
+    <id_legislador>30853</id_legislador>
+    <prefijo />
+    <sufijo />
+    <documento>NA</documento>
+    <id_autor>66917</id_autor>
+    <fecha_inicio_mandato>10/12/2023</fecha_inicio_mandato>
+    <fecha_fin_mandato>09/12/2027</fecha_fin_mandato>
+    <fch_desde>9/12/2027 00:00:00</fch_desde>
+    <foto>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/O_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</foto>
+    <fotoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/S_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</fotoS>
+    <fotoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/legislador/M_5e27c9dc-2d3e-48c4-9988-24197a83fbf8.jpg</fotoM>
+    <fecha_nacimiento>27/04/1972</fecha_nacimiento>
+    <oficina />
+    <telefono>4338-3000</telefono>
+    <id_sexo>1</id_sexo>
+    <actuacion_publica />
+    <id_bloque>119</id_bloque>
+    <bloque_color>FFCC00</bloque_color>
+    <bloque_logo>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/O_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logo>
+    <bloque_logoS>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/S_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoS>
+    <bloque_logoM>https://parlamentaria.legislatura.gob.ar/uploads/imagenes/bloque/M_d2a9bb8b-5e6b-4d1c-b21a-c086e6389248.jpg</bloque_logoM>
+    <id_bloque_cargo_tipo />
+    <cargo_bloque />
+    <reemplaza_a />
+    <id_legislador_reemplazo />
+    <url_legislador_reemplazo />
+    <cantidad_exptes_autor>150</cantidad_exptes_autor>
+    <cantidad_exptes_coautor>536</cantidad_exptes_coautor>
+    <cantidad_mandatos>2</cantidad_mandatos>
+    <motivo_reemplazo />
+    <id_business_party>33523</id_business_party>
+  </diputados>
+</ArrayOfDiputados>
+
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetComisionesPorDiputado
+Request Method
+POST
+
+
+Body: id_legislador: 30853
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfComisioncargos xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/" />
+
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar//webservices/Json.asmx/GetExpedienteAvanzada
+Request Method
+POST
+
+
+Body:
+
+IdProyectoTipo
+IdAutoresInternos
+IdUbicacion
+IdEstado
+Sumario
+SumarioExacto
+0
+FechaDesde
+03/03/2026
+FechaHasta
+03/03/2026
+AnioParlamentario
+Limite
+
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfExpedienteAvanzado xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <expedienteAvanzado>
+    <id_expediente>139934</id_expediente>
+    <nro_de_expediente>616-D-2026</nro_de_expediente>
+    <fch_inicio>3/3/2026 16:54:09</fch_inicio>
+    <autor_des>BIELLI, MARÍA</autor_des>
+    <coautores_des>FREIRE, VICTORIA; GRILLO, ALEJANDRO OMAR; LA BLUNDA, ANDRÉS; MODARELLI, JUAN PABLO; NEGRI, CLAUDIA</coautores_des>
+    <autor_id>30844</autor_id>
+    <coautores_id>30916, 30915, 30918, 30892, 30936</coautores_id>
+    <tipo_proyecto_des>RESOLUCION</tipo_proyecto_des>
+    <fch_movimiento>3/3/2026 16:54:53</fch_movimiento>
+    <ubicacion_des>DGDP</ubicacion_des>
+    <descripcion>ESPERANDO ASIGNACION DE GIRO (ESPERANDO RECEPCION)</descripcion>
+    <id_proyecto_tipo>2</id_proyecto_tipo>
+    <id_business_party>52</id_business_party>
+    <nro_de_orden_JefeGob />
+    <TieneSancion>0</TieneSancion>
+    <sumario>INFORMES REFERIDOS  AL ANUNCIO DEL JEFE DE GOBIERNO SOBRE LA INCLUSIÓN DE SISTEMAS DE INTELIGENCIA ARTIFICIAL EN LAS PROPUESTAS PEDAGÓGICAS DE LAS ESCUELAS DE NIVEL PRIMARIO Y SECUNDARIO</sumario>
+    <urlDoc>222300</urlDoc>
+  </expedienteAvanzado>
+  <expedienteAvanzado>
+    <id_expediente>139933</id_expediente>
+    <nro_de_expediente>615-D-2026</nro_de_expediente>
+    <fch_inicio>3/3/2026 16:51:09</fch_inicio>
+    <autor_des>LOUPIAS, FRANCISCO</autor_des>
+    <coautores_des />
+    <autor_id>30911</autor_id>
+    <coautores_id />
+    <tipo_proyecto_des>RESOLUCION</tipo_proyecto_des>
+    <fch_movimiento>3/3/2026 16:52:04</fch_movimiento>
+    <ubicacion_des>DGDP</ubicacion_des>
+    <descripcion>ESPERANDO ASIGNACION DE GIRO (ESPERANDO RECEPCION)</descripcion>
+    <id_proyecto_tipo>2</id_proyecto_tipo>
+    <id_business_party>52</id_business_party>
+    <nro_de_orden_JefeGob />
+    <TieneSancion>0</TieneSancion>
+    <sumario>DECLARASE DE INTERÉS DEPORTIVO, TURÍSTICO Y CULTURAL, AL CORTOMETRAJE DOCUMENTAL “MERLO BAJO CERO”,Y SE DISPONE LA ENTREGA DE UNA BANDEJA PROTOCOLAR</sumario>
+    <urlDoc>222299</urlDoc>
+  </expedienteAvanzado>
+</ArrayOfExpedienteAvanzado>
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar/webservices/json.asmx/GetLibrosExpediente?IdExpediente=139334
+Request Method
+GET
+
+Body: IdExpediente: 139334
+
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<RespuestaOfexpedienteLibros xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <status>
+    <esError>false</esError>
+    <message>OK</message>
+  </status>
+  <Listado>
+    <expedienteLibros>
+      <id_expediente>139334</id_expediente>
+      <expediente>9-D-2026</expediente>
+      <id_libro>2643</id_libro>
+      <id_libroWS>48562</id_libroWS>
+      <titulo>NORMAS ORIENTADAS AL CIUDADANO. LIBRO IV "SALUD"</titulo>
+    </expedienteLibros>
+    <expedienteLibros>
+      <id_expediente>139334</id_expediente>
+      <expediente>9-D-2026</expediente>
+      <id_libro>4333</id_libro>
+      <id_libroWS>55247</id_libroWS>
+      <titulo>APUESTAS ONLINE: LA TORMENTA PERFECTA</titulo>
+    </expedienteLibros>
+    <expedienteLibros>
+      <id_expediente>139334</id_expediente>
+      <expediente>9-D-2026</expediente>
+      <id_libro>4644</id_libro>
+      <id_libroWS>56393</id_libroWS>
+      <titulo>MANUAL PARA LA FORMACION INTEGRAL DE AGENTES COMUNITARIOS PARA LA PREVENCION INTEGRAL DE CONSUMO DE DROGAS</titulo>
+    </expedienteLibros>
+    <expedienteLibros>
+      <id_expediente>139334</id_expediente>
+      <expediente>9-D-2026</expediente>
+      <id_libro>4645</id_libro>
+      <id_libroWS>55961</id_libroWS>
+      <titulo>CUIDAR LAS INFANCIAS EN LA ERA DIGITAL: USO DE PANTALLAS, PORNOGRAFÃA, APUESTAS, ACOSOS, PREVENCIÃ“N DESDE LA FAMILIA Y LA ESCUELA</titulo>
+    </expedienteLibros>
+  </Listado>
+</RespuestaOfexpedienteLibros>
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar/webservices/Json.asmx/GetListaArchivosByBusinessParty
+Request Method
+POST
+
+Body: IdBusinessParty: 33188
+
+
+
+<?xml version="1.0" encoding="utf-8"?><ArrayOfClsArchivoBusinessParty xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><clsArchivoBusinessParty><IdArchivo>487</IdArchivo><Carpeta>D:\Servicios\FilesUPDNew\\Labor\uploads\SubsecretariaParlamentaria/33188/</Carpeta><NombreArchivo>III ConstituciondelaCiudad.pdf</NombreArchivo><NombreServidor>f3ce4ece-5851-458f-859b-030e8847dbc0.pdf</NombreServidor><Descripcion>Constitución de la Ciudad Autónoma de Buenos Aires</Descripcion><Titulo>Constitución de la Ciudad Autónoma de Buenos Aires</Titulo><TipoMime>application/pdf</TipoMime><InsertDate>26/2/2026 18:06:57</InsertDate></clsArchivoBusinessParty><clsArchivoBusinessParty><IdArchivo>486</IdArchivo><Carpeta>D:\Servicios\FilesUPDNew\\Labor\uploads\SubsecretariaParlamentaria/33188/</Carpeta><NombreArchivo>Plantilla Legislar 2026.dotx</NombreArchivo><NombreServidor>07f0fc1a-9d18-463d-85d1-fd69b4105792.dotx</NombreServidor><Descripcion>Plantilla para los proyectos ingresados desde el día 02/03/2026.</Descripcion><Titulo>Plantilla Legislar 2026</Titulo><TipoMime>application/vnd.openxmlformats-officedocument.word</TipoMime><InsertDate>26/2/2026 17:47:51</InsertDate></clsArchivoBusinessParty><clsArchivoBusinessParty><IdArchivo>472</IdArchivo><Carpeta>D:\Servicios\FilesUPDNew\\Labor\uploads\SubsecretariaParlamentaria/33188/</Carpeta><NombreArchivo>Reglamento 2023 - Diciembre 2023.pdf</NombreArchivo><NombreServidor>c462fba9-5c66-40a1-aae9-73cd75e8a8a9.pdf</NombreServidor><Descripcion>Actualizado a Diciembre de 2023</Descripcion><Titulo>Reglamento Interno Legislatura de la Ciudad Autónoma de Buenos Aires .</Titulo><TipoMime>application/pdf</TipoMime><InsertDate>19/12/2023 13:13:01</InsertDate></clsArchivoBusinessParty></ArrayOfClsArchivoBusinessParty>
+
+
+
+
+
+
+Request URL
+https://parlamentaria.legislatura.gob.ar/webservices/json.asmx/GetVotacionesExpediente?IdExpediente=139334
+Request Method
+GET
+
+Body: IdExpediente: 139334
+
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<RespuestaOfVotacionExpediente xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://tempuri.org/">
+  <status>
+    <esError>false</esError>
+    <message>OK</message>
+  </status>
+  <Listado />
+</RespuestaOfVotacionExpediente>
+
+
+
+
+
+
+https://parlamentaria.legislatura.gob.ar//pages/download.aspx?IdDoc=221735 este link descarga el documento en pdf que se puede extraer texto.
