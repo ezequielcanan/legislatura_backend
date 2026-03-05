@@ -168,6 +168,11 @@ INSTRUCCIONES:
 `;
   }
 
+  private parseDDMMYYYY(dateStr: string): Date {
+    const [day, month, year] = dateStr.split('/').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
   /**
    * Find nearby document embeddings, optionally pre-filtered by metadata
    */
@@ -179,6 +184,7 @@ INSTRUCCIONES:
       categories?: string[];
       tipo?: string;
       aiCategory?: string;
+      dateRange?: { from: string; to: string };
     },
   ): Promise<EmbeddingDocument[]> {
     try {
@@ -201,7 +207,21 @@ INSTRUCCIONES:
         query['metadata.tipo'] = filters.tipo;
       }
 
-      //console.log('RAG search query filters:', query, filters);
+
+      if (filters?.dateRange) {
+        const from = this.parseDDMMYYYY(filters.dateRange.from);
+        from.setUTCHours(0, 0, 0, 0);
+
+        const to = this.parseDDMMYYYY(filters.dateRange.to);
+        to.setUTCHours(23, 59, 59, 999);
+
+        query['metadata.fechaIngreso'] = {
+          $gte: from,
+          $lte: to,
+        };
+      }
+
+      console.log('RAG search query filters:', query);
 
       const candidates = await this.embeddingModel
         .find(query)

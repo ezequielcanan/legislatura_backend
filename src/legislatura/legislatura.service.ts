@@ -15,6 +15,7 @@ const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 import { LegislaturaProducer } from './legislatura.producer';
 import { SearchExpedientesDto } from './dto/search-expedientes.dto';
+import { th } from 'zod/v4/locales';
 
 const API_BASE = 'https://parlamentaria.legislatura.gob.ar';
 
@@ -499,13 +500,16 @@ export class LegislaturaService {
                 aiCategory: expediente.aiCategory,
                 chunkIndex: i,
                 totalChunks: chunks.length,
-                fechaIngreso: expediente.fechaIngreso,
+                fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
               },
               lastIndexedAt: new Date(),
             });
             embeddingCount++;
           } catch (err) {
-            this.logger.warn(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
+            expediente.status = ExpedienteStatus.FAILED;
+            expediente.errorMessage = err.message;
+            await expediente.save();
+            throw new Error(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
           }
         }
         expediente.embeddingCount = embeddingCount;
@@ -624,7 +628,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     const authorOrConditions: any[] = [];
 
     if (legisladorId) {
-      authorOrConditions.push({$or: [{ 'autor.legisladorId': legisladorId }, { 'coautores.legisladorId': legisladorId }]});
+      authorOrConditions.push({ $or: [{ 'autor.legisladorId': legisladorId }, { 'coautores.legisladorId': legisladorId }] });
     }
 
     if (bloqueId) {
@@ -632,7 +636,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       const legIds = legsInBloque.map((l) => l.legisladorId);
 
       if (legIds.length) {
-        authorOrConditions.push({$or: [{ 'autor.legisladorId': { $in: legIds } }, { 'coautores.legisladorId': { $in: legIds } }]});
+        authorOrConditions.push({ $or: [{ 'autor.legisladorId': { $in: legIds } }, { 'coautores.legisladorId': { $in: legIds } }] });
       } else {
       }
     }

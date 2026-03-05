@@ -82,6 +82,7 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
     //if (classification.tags.length > 0) ragFilters.tags = classification.tags;
     if (classification.categories.length > 0) ragFilters.categories = classification.categories;
     if (classification.tipo) ragFilters.tipo = classification.tipo;
+    if (classification.dateRange) ragFilters.dateRange = classification.dateRange;
 
     const relevantDocuments = await this.ragService.searchRelevantDocuments(
       classification.refinedQuery || text,
