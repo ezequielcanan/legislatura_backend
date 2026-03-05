@@ -76,6 +76,9 @@ export class Expediente {
   @Prop({ type: String })
   aiCategory: string;
 
+  @Prop({ type: String })
+  url: string;
+
   // Libros (books/documents) associated with the expediente
   @Prop({ type: [{ idDoc: Number, nombre: String, url: String, tipo: String }], default: [] })
   libros: Array<{ idDoc: number; nombre: string; url: string; tipo: string }>;

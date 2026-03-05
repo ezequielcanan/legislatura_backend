@@ -11,6 +11,8 @@ import { Expediente, ExpedienteDocument, ExpedienteStatus } from './schema/exped
 import { LegislaturaSync, LegislaturaSyncDocument, SyncStatus } from './schema/legislatura-sync.schema';
 import { Embedding, EmbeddingDocument, EmbeddingSourceType, VectorProvider } from '../embedding/schema/embedding.schema';
 import { OpenRouterService } from '../openrouter/openrouter.service';
+const { PDFParse } = require('pdf-parse');
+const mammoth = require('mammoth');
 import { LegislaturaProducer } from './legislatura.producer';
 import { SearchExpedientesDto } from './dto/search-expedientes.dto';
 
@@ -71,7 +73,7 @@ export class LegislaturaService {
   }
 
   async getBloques(): Promise<BloqueDocument[]> {
-    return this.bloqueModel.find().sort({ cantidad: -1 }).exec();
+    return this.bloqueModel.find().sort({ cantidad: -1 }).lean().exec();
   }
 
   async getBloquesWithCounts(): Promise<any[]> {
@@ -125,6 +127,7 @@ export class LegislaturaService {
           fechaFinMandato: d.fecha_fin_mandato || '',
           cargoRecinto: d.cargo_recinto || '',
           idCargoRecinto: d.id_cargo_recinto || 0,
+          fechaNacimiento: d.fecha_nacimiento || '',
         },
         { upsert: true, new: true },
       );
@@ -194,6 +197,8 @@ export class LegislaturaService {
       );
 
       const today = new Date();
+      //today.setDate(today.getDate() - 1);
+
       const dateStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
       this.logger.log(`Fetching expedientes for date: ${dateStr}`);
@@ -229,7 +234,7 @@ export class LegislaturaService {
       let newCount = 0;
       for (const exp of expedientes) {
         const expId = parseInt(exp.id_expediente);
-        
+
         if (existingIds.has(expId)) continue;
 
         // Parse autor
@@ -250,7 +255,7 @@ export class LegislaturaService {
           const coautoresDesStr = String(exp.coautores_des);
           const coautoresIds = coautoresIdsStr.split(',').map((id: string) => id.trim());
           const coautoresNames = coautoresDesStr.split(';').map((name: string) => name.trim());
-          
+
           for (let i = 0; i < coautoresIds.length && i < coautoresNames.length; i++) {
             const coautorParsed = this.parseAutorName(coautoresNames[i]);
             coautores.push({
@@ -262,8 +267,8 @@ export class LegislaturaService {
         }
 
         // Validate numero field - use expedienteId as fallback if empty
-        const numero = exp.numero && exp.numero.trim() !== '' 
-          ? exp.numero.trim() 
+        const numero = exp.nro_de_expediente && exp.nro_de_expediente.trim() !== ''
+          ? exp.nro_de_expediente.trim()
           : `EXP-${expId}`;
 
         await this.expedienteModel.create({
@@ -271,17 +276,18 @@ export class LegislaturaService {
           numero: numero,
           titulo: exp.titulo || exp.sumario || '',
           sumario: exp.sumario || '',
-          tipo: exp.tipo || '',
-          tipoId: exp.id_tipo || 0,
-          estado: exp.estado || '',
+          tipo: exp.tipo_proyecto_des || '',
+          tipoId: exp.id_proyecto_tipo || 0,
+          estado: exp.descripcion || '',
           estadoId: exp.id_estado || 0,
-          ubicacion: exp.ubicacion || '',
+          ubicacion: exp.ubicacion_des || '',
           ubicacionId: exp.id_ubicacion || 0,
-          fechaIngreso: exp.fecha || '',
-          fechaIngresoDate: this.parseDateString(exp.fecha) as any,
+          fechaIngreso: exp.fch_inicio || '',
+          fechaIngresoDate: this.parseDateString(exp.fch_inicio) as any,
           anioParlamentario: exp.anio_parlamentario || '',
           autor,
           coautores,
+          url: exp.urlDoc || '',
           status: ExpedienteStatus.PENDING,
         });
 
@@ -364,7 +370,7 @@ export class LegislaturaService {
         const coautoresDesStr = String(exp.coautores_des);
         const coautoresIds = coautoresIdsStr.split(',').map((id: string) => id.trim());
         const coautoresNames = coautoresDesStr.split(';').map((name: string) => name.trim());
-        
+
         for (let i = 0; i < coautoresIds.length && i < coautoresNames.length; i++) {
           const coautorParsed = this.parseAutorName(coautoresNames[i]);
           coautores.push({
@@ -376,8 +382,8 @@ export class LegislaturaService {
       }
 
       // Validate numero field - use expedienteId as fallback if empty
-      const numero = exp.numero && exp.numero.trim() !== '' 
-        ? exp.numero.trim() 
+      const numero = exp.nro_de_expediente && exp.nro_de_expediente.trim() !== ''
+        ? exp.nro_de_expediente.trim()
         : `EXP-${expId}`;
 
       await this.expedienteModel.create({
@@ -385,20 +391,22 @@ export class LegislaturaService {
         numero: numero,
         titulo: exp.titulo || exp.sumario || '',
         sumario: exp.sumario || '',
-        tipo: exp.tipo || '',
-        tipoId: exp.id_tipo || 0,
-        estado: exp.estado || '',
+        tipo: exp.tipo_proyecto_des || '',
+        tipoId: exp.id_proyecto_tipo || 0,
+        estado: exp.descripcion || '',
         estadoId: exp.id_estado || 0,
-        ubicacion: exp.ubicacion || '',
+        ubicacion: exp.ubicacion_des || '',
         ubicacionId: exp.id_ubicacion || 0,
-        fechaIngreso: exp.fecha || '',
-        fechaIngresoDate: this.parseDateString(exp.fecha) as any,
+        fechaIngreso: exp.fch_inicio || '',
+        fechaIngresoDate: this.parseDateString(exp.fch_inicio) as any,
         anioParlamentario: exp.anio_parlamentario || '',
         autor,
         coautores,
+        url: exp.urlDoc || '',
         status: ExpedienteStatus.PENDING,
       });
 
+      // Enqueue for processing (download PDF, summarize, tag, embed)
       await this.legislaturaProducer.enqueueProcessExpediente(expId);
       newCount++;
     }
@@ -424,7 +432,7 @@ export class LegislaturaService {
 
       // Extract PDF text from first available document
       let fullText = '';
-      for (const libro of libros) {
+      /*for (const libro of libros) {
         if (libro.url) {
           try {
             const text = await this.extractTextFromPdf(libro.url);
@@ -435,7 +443,14 @@ export class LegislaturaService {
             this.logger.warn(`Failed to extract text from libro ${libro.idDoc}: ${err.message}`);
           }
         }
+      }*/
+
+      const text = await this.extractTextFromPDF(`${API_BASE}/pages/download.aspx?IdDoc=${expediente?.url}`);
+      if (text && text.length > 50) {
+        fullText += text + '\n\n';
       }
+
+      //console.log("Snippet", fullText.substring(0, 100));
 
       expediente.pdfText = fullText || '';
 
@@ -574,7 +589,19 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     expedientes: ExpedienteDocument[];
     total: number;
   }> {
-    const { query, tipo, estado, bloqueId, legisladorId, tag, category, dateFrom, dateTo, limit = 50, skip = 0 } = filters;
+    const {
+      query,
+      tipo,
+      estado,
+      bloqueId,
+      legisladorId,
+      tag,
+      category,
+      dateFrom,
+      dateTo,
+      limit = 50,
+      skip = 0,
+    } = filters;
 
     const mongoQuery: any = {};
 
@@ -594,15 +621,25 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
 
+    const authorOrConditions: any[] = [];
+
     if (legisladorId) {
-      mongoQuery['autores.legisladorId'] = legisladorId;
+      authorOrConditions.push({$or: [{ 'autor.legisladorId': legisladorId }, { 'coautores.legisladorId': legisladorId }]});
     }
 
     if (bloqueId) {
-      // Find legisladores for that bloque, then filter by their IDs
       const legsInBloque = await this.legisladorModel.find({ bloqueId }, { legisladorId: 1 }).lean();
       const legIds = legsInBloque.map((l) => l.legisladorId);
-      mongoQuery['autores.legisladorId'] = { $in: legIds };
+
+      if (legIds.length) {
+        authorOrConditions.push({$or: [{ 'autor.legisladorId': { $in: legIds } }, { 'coautores.legisladorId': { $in: legIds } }]});
+      } else {
+      }
+    }
+
+    if (authorOrConditions.length) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and = [...mongoQuery.$and, ...authorOrConditions];
     }
 
     if (dateFrom || dateTo) {
@@ -610,13 +647,20 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       if (dateFrom) mongoQuery.fechaIngresoDate.$gte = new Date(dateFrom);
       if (dateTo) {
         const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
         mongoQuery.fechaIngresoDate.$lte = end;
+
       }
     }
 
     const [expedientes, total] = await Promise.all([
-      this.expedienteModel.find(mongoQuery).sort({ fechaIngresoDate: -1 }).skip(skip).limit(limit).lean().exec(),
+      this.expedienteModel
+        .find(mongoQuery)
+        .sort({ fechaIngresoDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
       this.expedienteModel.countDocuments(mongoQuery),
     ]);
 
@@ -629,7 +673,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
 
   async getExpedientesByLegislador(legisladorId: number): Promise<ExpedienteDocument[]> {
     return this.expedienteModel
-      .find({ 'autores.legisladorId': legisladorId })
+      .find({ $or: [{ 'autor.legisladorId': legisladorId }, { 'coautores.legisladorId': legisladorId }] })
       .sort({ fechaIngresoDate: -1 })
       .lean()
       .exec();
@@ -712,9 +756,9 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       );
 
       return listado.map((l: any) => ({
-        idDoc: l.id_doc || 0,
-        nombre: l.nombre || '',
-        url: l.id_doc ? `${API_BASE}/pages/download.aspx?IdDoc=${l.id_doc}` : '',
+        idDoc: l.id_libro || 0,
+        nombre: l.titulo || '',
+        url: l.id_libroWS || '',
         tipo: l.tipo || '',
       }));
     } catch (error) {
@@ -739,17 +783,31 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     }
   }
 
-  private async extractTextFromPdf(url: string): Promise<string> {
+  private async extractTextFromPDF(url: string): Promise<string> {
+    // First, try as PDF
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, { responseType: 'arraybuffer', timeout: 30000 }),
-      );
-      const pdfParse = require('pdf-parse');
-      const data = await pdfParse(Buffer.from(response.data));
-      return data.text || '';
-    } catch (error) {
-      this.logger.warn(`Failed to extract text from PDF: ${error.message}`);
-      return '';
+      const parser = new PDFParse({ url });
+      const result = await parser.getText({ global: true });
+      await parser.destroy();
+      return result.text;
+    } catch (pdfError) {
+      this.logger.warn(`PDF extraction failed for ${url}, trying Word format: ${pdfError.message}`);
+
+      // Try as Word document
+      try {
+        const response = await firstValueFrom(
+          this.httpService.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+          })
+        );
+
+        const result = await mammoth.extractRawText({ buffer: response.data });
+        this.logger.log(`Successfully extracted text from Word document: ${url}`);
+        return result.value;
+      } catch (wordError) {
+        throw new Error(`Failed to extract text from PDF: ${pdfError.message}. Also failed as Word: ${wordError.message}`);
+      }
     }
   }
 
@@ -773,6 +831,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
   private parseDateString(dateStr: string): Date | null {
     if (!dateStr) return null;
     // Handle dd/mm/yyyy format
+    dateStr = dateStr.split(' ')[0];
     const parts = dateStr.split('/');
     if (parts.length === 3) {
       const [day, month, year] = parts.map(Number);
@@ -785,17 +844,17 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
 
   private parseAutorName(fullName: string): { nombre: string; apellido: string } {
     if (!fullName) return { nombre: '', apellido: '' };
-    
+
     // Format: "APELLIDO, NOMBRE" or "APELLIDO, NOMBRE1 NOMBRE2"
     const parts = fullName.split(',').map((part) => part.trim());
-    
+
     if (parts.length >= 2) {
       return {
         apellido: parts[0],
         nombre: parts.slice(1).join(' '),
       };
     }
-    
+
     // If no comma, treat entire string as apellido
     return {
       apellido: fullName.trim(),

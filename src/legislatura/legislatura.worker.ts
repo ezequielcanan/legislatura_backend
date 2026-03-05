@@ -18,7 +18,7 @@ export class LegislaturaWorker extends BaseWorker implements OnModuleInit, OnMod
     };
     super('legislatura', connection, {
       concurrency: 4,
-      limiter: { max: 20, duration: 20000 },
+      limiter: { max: 50, duration: 20000 },
     });
   }
 

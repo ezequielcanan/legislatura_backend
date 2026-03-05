@@ -106,7 +106,7 @@ export class RagService {
           const metadata = sc.embedding.metadata || {};
 
           return {
-            content: sc.embedding.snippet || '',
+            content: exp.pdfText || '',
             expedienteId: exp.expedienteId,
             expedienteDbId: exp._id.toString(),
             numero: exp.numero,
@@ -178,6 +178,7 @@ INSTRUCCIONES:
       tags?: string[];
       categories?: string[];
       tipo?: string;
+      aiCategory?: string;
     },
   ): Promise<EmbeddingDocument[]> {
     try {
@@ -190,12 +191,17 @@ INSTRUCCIONES:
       if (filters?.tags && filters.tags.length > 0) {
         query['metadata.aiTags'] = { $in: filters.tags };
       }
-      if (filters?.categories && filters.categories.length > 0) {
+      /*if (filters?.aiCategory) {
+        query['metadata.aiCategory'] = filters.aiCategory;
+      }*/
+      /*if (filters?.categories && filters.categories.length > 0) {
         query['metadata.aiCategory'] = { $in: filters.categories };
-      }
+      }*/
       if (filters?.tipo) {
         query['metadata.tipo'] = filters.tipo;
       }
+
+      //console.log('RAG search query filters:', query, filters);
 
       const candidates = await this.embeddingModel
         .find(query)
