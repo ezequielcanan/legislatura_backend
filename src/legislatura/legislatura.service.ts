@@ -198,7 +198,7 @@ export class LegislaturaService {
       );
 
       const today = new Date();
-      //today.setDate(today.getDate() - 1);
+      //today.setDate(today.getDate() - 7);
 
       const dateStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 

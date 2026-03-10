@@ -142,16 +142,17 @@ export class RagService {
       return 'No se encontraron expedientes relevantes en la base de datos.';
     }
 
+    // Relevancia: ${(chunk.similarity * 100).toFixed(1)}%
+
     const formatted = chunks.map((chunk, idx) => {
       return `
-[Expediente ${idx + 1}]
+[Expediente ${chunk.numero}]
 Número: ${chunk.numero}
 Título: ${chunk.titulo}
 Tipo: ${chunk.tipo}
 Categoría: ${chunk.aiCategory}
 Tags: ${chunk.aiTags.join(', ')}
 Resumen AI: ${chunk.aiSummary}
-Relevancia: ${(chunk.similarity * 100).toFixed(1)}%
 Contenido: ${chunk.content}
 ---`;
     });
@@ -213,6 +214,19 @@ INSTRUCCIONES:
         from.setUTCHours(0, 0, 0, 0);
 
         const to = this.parseDDMMYYYY(filters.dateRange.to);
+        to.setUTCHours(23, 59, 59, 999);
+
+        query['metadata.fechaIngreso'] = {
+          $gte: from,
+          $lte: to,
+        };
+      } else {
+        const from = new Date()
+        from.setDate(from.getDate());
+        from.setUTCHours(0, 0, 0, 0);
+
+        const to = new Date()
+        to.setDate(to.getDate());
         to.setUTCHours(23, 59, 59, 999);
 
         query['metadata.fechaIngreso'] = {

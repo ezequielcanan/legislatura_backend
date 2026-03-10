@@ -24,6 +24,14 @@ export class ChatService {
   ) {
     this.systemPrompt = `Eres un asistente AI especializado en la Legislatura de la Ciudad Autónoma de Buenos Aires.
 
+CONTEXTO TEMPORAL:
+Fecha actual de referencia: {current_date}
+
+Esta fecha se proporciona únicamente como referencia temporal para el modelo.
+- No asumas otras fechas distintas.
+- Cuando hables de "hoy", "actualmente" o "recientemente", utiliza esta fecha como referencia.
+- No modifiques ni infieras una fecha diferente salvo que el usuario lo indique explícitamente.
+
 CAPACIDADES:
 1. Analizar y explicar expedientes legislativos (proyectos de ley, resoluciones, declaraciones, comunicaciones)
 2. Proporcionar información sobre legisladores, bloques políticos y comisiones
@@ -183,6 +191,7 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
       role: 'system',
       content: this.systemPrompt
         .replace('{documents}', documentsContext)
+        .replace('{current_date}', new Date().toLocaleDateString('es-AR')),
     });
 
     // Agregar historial de mensajes (limitado)
