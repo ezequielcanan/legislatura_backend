@@ -87,6 +87,20 @@ export class Expediente {
   @Prop({ type: Object, default: null })
   votaciones: Record<string, any> | null;
 
+  // Comisiones (from giros API)
+  @Prop({ type: [{ idComision: Number, comisionDes: String, comisionUrl: String, orden: Number, giroTipoDes: String }], default: [] })
+  comisiones: Array<{ idComision: number; comisionDes: string; comisionUrl: string; orden: number; giroTipoDes: string }>;
+
+  @Prop({ type: Date })
+  comisionesUpdatedAt: Date;
+
+  // Ubicacion actual (from API, refreshed periodically)
+  @Prop({ type: String })
+  ubicacionActual: string;
+
+  @Prop({ type: Date })
+  ubicacionActualUpdatedAt: Date;
+
   // Processing status
   @Prop({ type: String, enum: Object.values(ExpedienteStatus), default: ExpedienteStatus.PENDING })
   status: ExpedienteStatus;
@@ -105,6 +119,22 @@ export class Expediente {
 
   @Prop({ type: Date })
   lastRetryAt: Date;
+
+  // BAE origin tracking
+  @Prop({ type: Boolean, default: false })
+  baeSource: boolean;
+
+  @Prop({ type: [{ nroOrden: Number, anoParlamentario: Number }], default: [] })
+  baeReferences: Array<{ nroOrden: number; anoParlamentario: number }>;
+
+  @Prop({ type: String })
+  baeGrupo: string;
+
+  @Prop({ type: Number })
+  baeOrden: number;
+
+  @Prop({ type: String })
+  baeDescripcion: string;
 }
 
 export const ExpedienteSchema = SchemaFactory.createForClass(Expediente);
@@ -116,3 +146,6 @@ ExpedienteSchema.index({ aiTags: 1 });
 ExpedienteSchema.index({ aiCategory: 1 });
 ExpedienteSchema.index({ tipo: 1 });
 ExpedienteSchema.index({ 'autores.legisladorId': 1 });
+ExpedienteSchema.index({ 'comisiones.comisionUrl': 1 });
+ExpedienteSchema.index({ baeSource: 1 });
+ExpedienteSchema.index({ 'baeReferences.nroOrden': 1, 'baeReferences.anoParlamentario': 1 });

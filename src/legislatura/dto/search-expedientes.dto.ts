@@ -18,6 +18,11 @@ export class SearchExpedientesDto {
   @IsString()
   estado?: string;
 
+  @ApiProperty({ required: false, description: 'Filter by comision URL (e.g. comision/salud)' })
+  @IsOptional()
+  @IsString()
+  comisionUrl?: string;
+
   @ApiProperty({ required: false, description: 'Filter by bloque ID' })
   @IsOptional()
   @Type(() => Number)

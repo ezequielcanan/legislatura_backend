@@ -6,6 +6,7 @@ import { Bloque, BloqueSchema } from './schema/bloque.schema';
 import { Legislador, LegisladorSchema } from './schema/legislador.schema';
 import { Expediente, ExpedienteSchema } from './schema/expediente.schema';
 import { LegislaturaSync, LegislaturaSyncSchema } from './schema/legislatura-sync.schema';
+import { Bae, BaeSchema } from './schema/bae.schema';
 import { Embedding, EmbeddingSchema } from '../embedding/schema/embedding.schema';
 import { LegislaturaService } from './legislatura.service';
 import { LegislaturaController } from './legislatura.controller';
@@ -22,6 +23,7 @@ import { QueueModule } from '../queue/queue.module';
       { name: Legislador.name, schema: LegisladorSchema },
       { name: Expediente.name, schema: ExpedienteSchema },
       { name: LegislaturaSync.name, schema: LegislaturaSyncSchema },
+      { name: Bae.name, schema: BaeSchema },
       { name: Embedding.name, schema: EmbeddingSchema },
     ]),
     HttpModule.register({

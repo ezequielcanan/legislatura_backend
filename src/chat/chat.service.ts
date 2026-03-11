@@ -224,22 +224,22 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
     userMessageId: string,
     fullResponse: string,
   ): Promise<void> {
+    const trimmed = fullResponse.trim();
+    if (!trimmed) {
+      this.logger.warn('Received empty response from stream, skipping message save');
+      return;
+    }
     try {
       await this.messageService.createMessage(userId, {
         conversationId,
-        text: fullResponse.trim(),
+        text: trimmed,
         role: MessageRole.ASSISTANT,
         metadata: {
           streamed: true,
         },
       });
     } catch (error) {
-      this.logger.error(
-        'Error saving streamed response:',
-        error,
-        fullResponse,
-        fullResponse.trim(),
-      );
+      this.logger.error('Error saving streamed response:', error);
       throw error;
     }
   }

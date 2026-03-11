@@ -9,6 +9,7 @@ import { Bloque, BloqueDocument } from './schema/bloque.schema';
 import { Legislador, LegisladorDocument } from './schema/legislador.schema';
 import { Expediente, ExpedienteDocument, ExpedienteStatus } from './schema/expediente.schema';
 import { LegislaturaSync, LegislaturaSyncDocument, SyncStatus } from './schema/legislatura-sync.schema';
+import { Bae, BaeDocument } from './schema/bae.schema';
 import { Embedding, EmbeddingDocument, EmbeddingSourceType, VectorProvider } from '../embedding/schema/embedding.schema';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 const { PDFParse } = require('pdf-parse');
@@ -18,6 +19,39 @@ import { SearchExpedientesDto } from './dto/search-expedientes.dto';
 import { th } from 'zod/v4/locales';
 
 const API_BASE = 'https://parlamentaria.legislatura.gob.ar';
+
+// Master list of all comisiones (static reference data)
+export const COMISIONES_LIST = [
+  { idComision: 36, nombre: 'Asuntos Constitucionales', url: 'comision/asuntosconstitucionales' },
+  { idComision: 37, nombre: 'Comunicación Social, Medios De Comunicación Y Tecnologías De La Comunicación', url: 'comision/comunicacionsocial' },
+  { idComision: 38, nombre: 'Cultura', url: 'comision/cultura' },
+  { idComision: 39, nombre: 'Defensa De Consumidores Y Usuarios', url: 'comision/defensadeconsumidoresyusuarios' },
+  { idComision: 40, nombre: 'Derechos Humanos, Garantías Y Antidiscriminación', url: 'comision/derechoshumanosgarantiasyantidiscriminacion' },
+  { idComision: 41, nombre: 'Desarrollo Económico, Mercosur Y Políticas De Empleo', url: 'comision/desarrolloeconomicomercosurypoliticasdeempleo' },
+  { idComision: 42, nombre: 'Descentralización Y Participación Ciudadana', url: 'comision/descentralizacionyparticipacionciudadana' },
+  { idComision: 43, nombre: 'Ambiente', url: 'comision/ambiente' },
+  { idComision: 44, nombre: 'Educación, Ciencia Y Tecnología', url: 'comision/educacioncienciaytecnologia' },
+  { idComision: 45, nombre: 'Justicia', url: 'comision/justicia' },
+  { idComision: 47, nombre: 'Mujeres, Géneros Y Diversidades', url: 'comision/mujeresgenerosydiversidades' },
+  { idComision: 48, nombre: 'Obras Y Servicios Públicos', url: 'comision/obrasyserviciospublicos' },
+  { idComision: 49, nombre: 'Planeamiento Urbano', url: 'comision/planeamientourbano' },
+  { idComision: 50, nombre: 'Políticas De Promoción E Integración Social', url: 'comision/politicasdepromocioneintegracionsocial' },
+  { idComision: 51, nombre: 'Presupuesto, Hacienda, Administración Financiera Y Política Tributaria', url: 'comision/presupuestohaciendaadministracionfinancieraypoliticatributaria' },
+  { idComision: 52, nombre: 'Protección Y Uso Del Espacio Público', url: 'comision/proteccionyusodelespaciopublico' },
+  { idComision: 53, nombre: 'Asuntos Metropolitanos Y Relaciones Interjurisdiccionales', url: 'comision/relacionesinterjurisdiccionales' },
+  { idComision: 54, nombre: 'Salud', url: 'comision/salud' },
+  { idComision: 55, nombre: 'Seguridad', url: 'comision/seguridad' },
+  { idComision: 56, nombre: 'Tránsito Y Transporte', url: 'comision/transitoytransporte' },
+  { idComision: 57, nombre: 'Turismo Y Deportes', url: 'comision/turismoydeportes' },
+  { idComision: 58, nombre: 'Vivienda', url: 'comision/vivienda' },
+  { idComision: 59, nombre: 'Junta De Ética, Acuerdos Y Organismos De Control', url: 'comision/juntadeeticaacuerdosyorganismosdecontrol' },
+  { idComision: 60, nombre: 'Junta De Interpretación Y Reglamento', url: 'comision/juntadeinterpretacionyreglamento' },
+  { idComision: 65, nombre: 'Legislacion General', url: 'comision/legislaciongeneral' },
+  { idComision: 66, nombre: 'Legislacion Del Trabajo', url: 'comision/legislaciondeltrabajo' },
+  { idComision: 69, nombre: 'Niñez, Adolescencia Y Juventud', url: 'comision/ninezadolescenciayjuventud' },
+  { idComision: 70, nombre: 'Discapacidad', url: 'comision/discapacidad' },
+  { idComision: 71, nombre: 'Personas Mayores', url: 'comision/personasmayores' },
+];
 
 @Injectable()
 export class LegislaturaService {
@@ -30,6 +64,7 @@ export class LegislaturaService {
     @InjectModel(Expediente.name) private expedienteModel: Model<ExpedienteDocument>,
     @InjectModel(LegislaturaSync.name) private syncModel: Model<LegislaturaSyncDocument>,
     @InjectModel(Embedding.name) private embeddingModel: Model<EmbeddingDocument>,
+    @InjectModel(Bae.name) private baeModel: Model<BaeDocument>,
     private httpService: HttpService,
     private configService: ConfigService,
     private openRouterService: OpenRouterService,
@@ -431,6 +466,18 @@ export class LegislaturaService {
       const votaciones = await this.fetchVotacionesExpediente(expedienteId);
       expediente.votaciones = votaciones;
 
+      // Fetch giros (comisiones)
+      const giros = await this.fetchGirosExpediente(expedienteId);
+      expediente.comisiones = giros;
+      expediente.comisionesUpdatedAt = new Date();
+
+      // Fetch ubicacion actual
+      const ubicacionActual = await this.fetchUbicacionActual(expedienteId);
+      if (ubicacionActual) {
+        expediente.ubicacionActual = ubicacionActual;
+        expediente.ubicacionActualUpdatedAt = new Date();
+      }
+
       // Extract PDF text from first available document
       let fullText = '';
       /*for (const libro of libros) {
@@ -501,6 +548,7 @@ export class LegislaturaService {
                 chunkIndex: i,
                 totalChunks: chunks.length,
                 fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
+                baeSource: expediente.baeSource || false,
               },
               lastIndexedAt: new Date(),
             });
@@ -597,6 +645,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       query,
       tipo,
       estado,
+      comisionUrl,
       bloqueId,
       legisladorId,
       tag,
@@ -622,6 +671,7 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
 
     if (tipo) mongoQuery.tipo = tipo;
     if (estado) mongoQuery.estado = estado;
+    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
 
@@ -787,6 +837,97 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     }
   }
 
+  async fetchUbicacionActual(expedienteId: number): Promise<string> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${API_BASE}/webservices/Json.asmx/GetExpedienteUbicacionActual?IdExpediente=${expedienteId}`,
+          { timeout: 15000 },
+        ),
+      );
+      const parsed = this.xmlParser.parse(response.data);
+      const ubicaciones = this.ensureArray(parsed?.ArrayOfExpedienteUbicacionActual?.expedienteUbicacionActual);
+      return ubicaciones[0]?.ubicacion_des || '';
+    } catch (error) {
+      this.logger.warn(`Failed to fetch ubicacion actual for expediente ${expedienteId}: ${error.message}`);
+      return '';
+    }
+  }
+
+  async fetchGirosExpediente(expedienteId: number): Promise<Array<{ idComision: number; comisionDes: string; comisionUrl: string; orden: number; giroTipoDes: string }>> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${API_BASE}/webservices/Json.asmx/GetExpedienteGiros?IdExpediente=${expedienteId}`,
+          { timeout: 15000 },
+        ),
+      );
+      const parsed = this.xmlParser.parse(response.data);
+      const giros = this.ensureArray(parsed?.ArrayOfExpedienteGiros?.expedienteGiros);
+
+      return giros.map((g: any) => ({
+        idComision: parseInt(g.id_comision) || 0,
+        comisionDes: g.comision_des || '',
+        comisionUrl: g.comision_url || '',
+        orden: parseInt(g.orden) || 0,
+        giroTipoDes: g.expediente_giro_tipo_des || '',
+      }));
+    } catch (error) {
+      this.logger.warn(`Failed to fetch giros for expediente ${expedienteId}: ${error.message}`);
+      return [];
+    }
+  }
+
+  getComisiones(): typeof COMISIONES_LIST {
+    return COMISIONES_LIST;
+  }
+
+  /**
+   * Re-sync giros (comisiones) and ubicacion actual for expedientes in a date window.
+   * @param months - how many months of data to cover
+   * @param offsetMonths - shift the window backwards by this many months (0 = up to now)
+   */
+  async syncGirosForRecentExpedientes(months: number = 6, offsetMonths: number = 0): Promise<{ updated: number; total: number }> {
+    const endDate = new Date();
+    if (offsetMonths > 0) {
+      endDate.setMonth(endDate.getMonth() - offsetMonths);
+    }
+    const startDate = new Date(endDate);
+    startDate.setMonth(startDate.getMonth() - months);
+
+    const expedientes = await this.expedienteModel
+      .find({ fechaIngresoDate: { $gte: startDate, $lte: endDate } }, { expedienteId: 1 })
+      .lean()
+      .exec();
+
+    this.logger.log(`Syncing giros+ubicacion for ${expedientes.length} expedientes (${months}m window, ${offsetMonths}m offset)...`);
+
+    let updated = 0;
+    for (const exp of expedientes) {
+      try {
+        const [giros, ubicacionActual] = await Promise.all([
+          this.fetchGirosExpediente(exp.expedienteId),
+          this.fetchUbicacionActual(exp.expedienteId),
+        ]);
+        const updateFields: any = { comisiones: giros, comisionesUpdatedAt: new Date() };
+        if (ubicacionActual) {
+          updateFields.ubicacionActual = ubicacionActual;
+          updateFields.ubicacionActualUpdatedAt = new Date();
+        }
+        await this.expedienteModel.updateOne(
+          { expedienteId: exp.expedienteId },
+          { $set: updateFields },
+        );
+        updated++;
+      } catch (err) {
+        this.logger.warn(`Failed to sync giros/ubicacion for expediente ${exp.expedienteId}: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`Giros+ubicacion sync completed: ${updated}/${expedientes.length} updated`);
+    return { updated, total: expedientes.length };
+  }
+
   private async extractTextFromPDF(url: string): Promise<string> {
     // First, try as PDF
     try {
@@ -888,5 +1029,378 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       });
     }
     return record;
+  }
+
+  // ─── BAE ─────────────────────────────────────────────────
+
+  /**
+   * Fetch BAE metadata (header) from the external API using GET.
+   */
+  private async fetchBaeHeader(nroOrden: number, anoParlamentario: number): Promise<any | null> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${API_BASE}/webservices/Json.asmx/GetBAENroAno?nroOrden=${nroOrden}&anoParlamentario=${anoParlamentario}`,
+          { timeout: 30000, responseType: 'text' },
+        ),
+      );
+      const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
+      const baes = this.ensureArray(parsed?.ArrayOfBae?.bae);
+      return baes[0] || null;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch BAE header ${nroOrden}-${anoParlamentario}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch full expediente basic data from the external API using GetExpedienteDatosBasicos.
+   */
+  private async fetchExpedienteDatosBasicos(expedienteId: number): Promise<any | null> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${API_BASE}/webservices/Json.asmx/GetExpedienteDatosBasicos?IdExpediente=${expedienteId}&NumeroOrden=&AnoParlamentario=&IdExpedientes=`,
+          { timeout: 30000, responseType: 'text' },
+        ),
+      );
+      const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
+      const items = this.ensureArray(parsed?.ArrayOfExpedienteBasicos?.expedienteBasicos);
+      return items[0] || null;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch datos basicos for expediente ${expedienteId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch BAE items (expedientes list) from the external API using GET.
+   */
+  private async fetchBaeItems(nroOrden: number, anoParlamentario: number): Promise<any[]> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${API_BASE}/webservices/Json.asmx/GetBAEDigitalNroAno?nroOrden=${nroOrden}&anoParlamentario=${anoParlamentario}`,
+          { timeout: 30000, responseType: 'text' },
+        ),
+      );
+      const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
+      return this.ensureArray(parsed?.ArrayOfBaeItems?.baeItems);
+    } catch (error) {
+      this.logger.warn(`Failed to fetch BAE items ${nroOrden}-${anoParlamentario}: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Sync a single BAE by nroOrden and anoParlamentario.
+   * Creates/updates the BAE record and processes new expedientes.
+   */
+  async syncBae(nroOrden: number, anoParlamentario: number): Promise<{ baeId: number; totalItems: number; newExpedientes: number }> {
+    this.logger.log(`Syncing BAE ${nroOrden}-${anoParlamentario}...`);
+
+    // Fetch header to confirm it exists
+    const header = await this.fetchBaeHeader(nroOrden, anoParlamentario);
+    if (!header) {
+      throw new Error(`BAE ${nroOrden}-${anoParlamentario} not found`);
+    }
+
+    const baeId = parseInt(header.id_bae);
+
+    // Fetch items
+    const items = await this.fetchBaeItems(nroOrden, anoParlamentario);
+    this.logger.log(`BAE ${nroOrden}-${anoParlamentario}: found ${items.length} items`);
+
+    // Get existing expediente IDs
+    const existingExpedientes = await this.expedienteModel.find(
+      {},
+      { expedienteId: 1, baeReferences: 1 },
+    ).lean().exec();
+    const existingMap = new Map<number, any>();
+    for (const e of existingExpedientes) {
+      existingMap.set(e.expedienteId, e);
+    }
+
+    let newCount = 0;
+    for (const item of items) {
+      const documentoId = parseInt(item.id_documento);
+      if (!documentoId || isNaN(documentoId)) continue;
+
+      const baeRef = { nroOrden, anoParlamentario };
+      const existing = existingMap.get(documentoId);
+
+      if (existing) {
+        // Expediente already exists - add BAE reference if not already present
+        const alreadyReferenced = (existing.baeReferences || []).some(
+          (r: any) => r.nroOrden === nroOrden && r.anoParlamentario === anoParlamentario,
+        );
+        if (!alreadyReferenced) {
+          await this.expedienteModel.updateOne(
+            { expedienteId: documentoId },
+            { $addToSet: { baeReferences: baeRef } },
+          );
+        }
+        continue;
+      }
+
+      // New expediente from BAE — fetch full data first
+      const basicos = await this.fetchExpedienteDatosBasicos(documentoId);
+
+      // Parse autor
+      let autor: { legisladorId: number; nombre: string; apellido: string } | undefined = undefined;
+      const autorId = basicos?.autor_id ?? item.origen_des;
+      const autorDes = basicos?.autor_des;
+      if (autorId && autorDes) {
+        const autorParsed = this.parseAutorName(String(autorDes));
+        autor = {
+          legisladorId: parseInt(String(autorId)) || 0,
+          nombre: autorParsed.nombre,
+          apellido: autorParsed.apellido,
+        };
+      }
+
+      // Parse coautores — GetExpedienteDatosBasicos uses ';' for both IDs and names
+      const coautores: Array<{ legisladorId: number; nombre: string; apellido: string }> = [];
+      if (basicos?.coautores_id && basicos?.coautores_des) {
+        const coautoresIds = String(basicos.coautores_id).split(';').map((s: string) => s.trim()).filter(Boolean);
+        const coautoresNames = String(basicos.coautores_des).split(';').map((s: string) => s.trim()).filter(Boolean);
+        for (let i = 0; i < coautoresIds.length && i < coautoresNames.length; i++) {
+          const parsed = this.parseAutorName(coautoresNames[i]);
+          coautores.push({
+            legisladorId: parseInt(coautoresIds[i]) || 0,
+            nombre: parsed.nombre,
+            apellido: parsed.apellido,
+          });
+        }
+      }
+
+      // Prefer data from basicos, fall back to BAE item fields
+      const numero = (basicos?.nro_de_expediente && String(basicos.nro_de_expediente).trim() !== '')
+        ? String(basicos.nro_de_expediente).trim()
+        : (item.nro_de_expediente && String(item.nro_de_expediente).trim() !== '')
+          ? String(item.nro_de_expediente).trim()
+          : `EXP-${documentoId}`;
+
+      const sumario = basicos?.sumario || item.descripcion_bae || item.descripcion || '';
+      const titulo = sumario;
+      const tipo = basicos?.proyecto_tipo_des || this.mapBaeProyectoTipo(parseInt(item.id_proyecto_tipo));
+      const fechaIngreso = basicos?.fch_inicio || item.fch_desde || '';
+      const anioParlamentarioStr = basicos?.ano_parlamentario ? String(basicos.ano_parlamentario) : String(anoParlamentario);
+      const urlDoc = basicos?.urlDoc ? String(basicos.urlDoc) : '';
+
+      await this.expedienteModel.create({
+        expedienteId: documentoId,
+        numero,
+        titulo,
+        sumario,
+        tipo,
+        tipoId: parseInt(item.id_proyecto_tipo) || 0,
+        estado: '',
+        estadoId: 0,
+        ubicacion: '',
+        ubicacionId: 0,
+        fechaIngreso,
+        fechaIngresoDate: this.parseDateString(fechaIngreso) as any,
+        anioParlamentario: anioParlamentarioStr,
+        autor,
+        coautores,
+        url: urlDoc,
+        status: ExpedienteStatus.PENDING,
+        baeSource: true,
+        baeReferences: [baeRef],
+        baeGrupo: item.bae_grupo_des || '',
+        baeOrden: parseInt(item.orden) || 0,
+        baeDescripcion: item.descripcion_bae || '',
+      });
+
+      // Enqueue for processing using the same pipeline
+      await this.legislaturaProducer.enqueueProcessExpediente(documentoId);
+      newCount++;
+    }
+
+    // Save/update the BAE record
+    await this.baeModel.findOneAndUpdate(
+      { baeId },
+      {
+        baeId,
+        nroOrden,
+        anoParlamentario,
+        fechaDesde: header.fch_desde || '',
+        fechaDesdeDate: this.parseDateString(header.fch_desde) as any,
+        fechaHasta: header.fch_hasta || '',
+        fechaHastaDate: this.parseDateString(header.fch_hasta) as any,
+        totalItems: items.length,
+        newExpedientesAdded: newCount,
+        syncedAt: new Date(),
+      },
+      { upsert: true, new: true },
+    );
+
+    this.logger.log(`BAE ${nroOrden}-${anoParlamentario} synced: ${newCount} new expedientes from ${items.length} items`);
+    return { baeId, totalItems: items.length, newExpedientes: newCount };
+  }
+
+  /**
+   * Check if a new BAE has been published for the current year and sync it.
+   * Tries the next nroOrden after the latest known one.
+   */
+  async syncLatestBae(): Promise<{ synced: boolean; nroOrden?: number; anoParlamentario?: number; newExpedientes?: number }> {
+    const currentYear = new Date().getFullYear();
+
+    // Find latest BAE for this year
+    const latestBae = await this.baeModel
+      .findOne({ anoParlamentario: currentYear })
+      .sort({ nroOrden: -1 })
+      .lean()
+      .exec();
+
+    const nextNro = latestBae ? latestBae.nroOrden + 1 : 1;
+
+    this.logger.log(`Checking for new BAE: ${nextNro}-${currentYear}...`);
+
+    // Check if the next BAE exists
+    const header = await this.fetchBaeHeader(nextNro, currentYear);
+    if (!header) {
+      this.logger.log(`No new BAE found (tried ${nextNro}-${currentYear})`);
+      return { synced: false };
+    }
+
+    // New BAE found — sync it
+    const result = await this.syncBae(nextNro, currentYear);
+    return {
+      synced: true,
+      nroOrden: nextNro,
+      anoParlamentario: currentYear,
+      newExpedientes: result.newExpedientes,
+    };
+  }
+
+  /**
+   * Sync all BAEs for a specific year. Iterates from 1 until no more BAEs are found.
+   */
+  async syncBaesByYear(anoParlamentario: number): Promise<{ totalBaes: number; totalNewExpedientes: number }> {
+    this.logger.log(`Syncing all BAEs for year ${anoParlamentario}...`);
+
+    let nroOrden = 1;
+    let totalBaes = 0;
+    let totalNewExpedientes = 0;
+
+    while (true) {
+      const header = await this.fetchBaeHeader(nroOrden, anoParlamentario);
+      if (!header) {
+        this.logger.log(`No more BAEs found after ${nroOrden - 1} for year ${anoParlamentario}`);
+        break;
+      }
+
+      try {
+        const result = await this.syncBae(nroOrden, anoParlamentario);
+        totalBaes++;
+        totalNewExpedientes += result.newExpedientes;
+      } catch (err) {
+        this.logger.error(`Error syncing BAE ${nroOrden}-${anoParlamentario}: ${err.message}`);
+      }
+
+      nroOrden++;
+    }
+
+    this.logger.log(`Year ${anoParlamentario}: synced ${totalBaes} BAEs, ${totalNewExpedientes} new expedientes`);
+    return { totalBaes, totalNewExpedientes };
+  }
+
+  /**
+   * Get list of all synced BAEs, ordered by year desc, nroOrden desc.
+   */
+  async getBaes(anoParlamentario?: number): Promise<BaeDocument[]> {
+    const filter: any = {};
+    if (anoParlamentario) filter.anoParlamentario = anoParlamentario;
+    return this.baeModel.find(filter).sort({ anoParlamentario: -1, nroOrden: -1 }).lean().exec();
+  }
+
+  /**
+   * Get a single BAE with its associated expedientes.
+   */
+  async getBaeWithExpedientes(
+    nroOrden: number,
+    anoParlamentario: number,
+    filters: SearchExpedientesDto = {},
+  ): Promise<{ bae: BaeDocument | null; expedientes: ExpedienteDocument[]; total: number }> {
+    const bae = await this.baeModel
+      .findOne({ nroOrden, anoParlamentario })
+      .lean()
+      .exec();
+
+    const { query, tipo, comisionUrl, bloqueId, legisladorId, limit = 50, skip = 0 } = filters;
+    const mongoQuery: any = {
+      'baeReferences': { $elemMatch: { nroOrden, anoParlamentario } },
+    };
+
+    if (query && query.trim()) {
+      const searchRegex = new RegExp(query.trim(), 'i');
+      mongoQuery.$or = [
+        { numero: searchRegex },
+        { titulo: searchRegex },
+        { sumario: searchRegex },
+        { aiSummary: searchRegex },
+        { aiTags: searchRegex },
+      ];
+    }
+
+    if (tipo) mongoQuery.tipo = tipo;
+    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+
+    if (legisladorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({
+        $or: [
+          { 'autor.legisladorId': legisladorId },
+          { 'coautores.legisladorId': legisladorId },
+        ],
+      });
+    }
+
+    if (bloqueId) {
+      const legsInBloque = await this.legisladorModel.find({ bloqueId }, { legisladorId: 1 }).lean();
+      const legIds = legsInBloque.map((l) => l.legisladorId);
+      if (legIds.length) {
+        mongoQuery.$and = mongoQuery.$and || [];
+        mongoQuery.$and.push({
+          $or: [
+            { 'autor.legisladorId': { $in: legIds } },
+            { 'coautores.legisladorId': { $in: legIds } },
+          ],
+        });
+      }
+    }
+
+    const [expedientes, total] = await Promise.all([
+      this.expedienteModel
+        .find(mongoQuery)
+        .sort({ baeOrden: 1, fechaIngresoDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.expedienteModel.countDocuments(mongoQuery),
+    ]);
+
+    return { bae, expedientes, total };
+  }
+
+  /**
+   * Map BAE id_proyecto_tipo to human-readable tipo string.
+   */
+  private mapBaeProyectoTipo(tipoId: number): string {
+    const map: Record<number, string> = {
+      1: 'LEY',
+      2: 'RESOLUCION',
+      3: 'DECLARACION',
+      4: 'HACE CONSIDERACIONES',
+      5: 'INTERNO',
+      6: 'ESCUELAS',
+      7: 'OFICIAL',
+      8: 'PARTICULAR',
+      9: 'REMITE ACTUACIONES',
+    };
+    return map[tipoId] || 'NO DEFINIDO';
   }
 }

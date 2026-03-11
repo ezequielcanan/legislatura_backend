@@ -214,6 +214,19 @@ export class LegislaturaController {
     }
   }
 
+  // ─── Comisiones ───────────────────────────────────
+
+  @Get('comisiones')
+  @ApiOperation({ summary: 'Get all comisiones (commissions) for filtering' })
+  async getComisiones() {
+    try {
+      const comisiones = this.legislaturaService.getComisiones();
+      return { success: true, data: comisiones };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   // ─── Stats ───────────────────────────────────────
 
   @Get('stats')
@@ -222,6 +235,125 @@ export class LegislaturaController {
     try {
       const stats = await this.legislaturaService.getStats();
       return { success: true, data: stats };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  // ─── Sync Giros (admin) ──────────────────────────
+
+  @Post('sync/giros')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Trigger manual giros+ubicacion sync for recent expedientes' })
+  @ApiQuery({ name: 'months', required: false, type: Number, description: 'Window size in months (default 6)' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Offset months from now (default 0)' })
+  async triggerSyncGiros(
+    @Query('months') months?: string,
+    @Query('offset') offset?: string,
+  ) {
+    try {
+      const m = months ? parseInt(months) : 6;
+      const o = offset ? parseInt(offset) : 0;
+      const result = await this.legislaturaService.syncGirosForRecentExpedientes(m, o);
+      return { success: true, ...result };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  // ─── BAE ─────────────────────────────────────────
+
+  @Get('bae')
+  @ApiOperation({ summary: 'Get list of all synced BAEs' })
+  @ApiQuery({ name: 'anoParlamentario', required: false, type: Number })
+  async getBaes(@Query('anoParlamentario') anoParlamentario?: string) {
+    try {
+      const data = await this.legislaturaService.getBaes(
+        anoParlamentario ? parseInt(anoParlamentario) : undefined,
+      );
+      return { success: true, data };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('bae/:nroOrden/:anoParlamentario')
+  @ApiOperation({ summary: 'Get BAE with its expedientes (supports same filters as expedientes)' })
+  async getBaeWithExpedientes(
+    @Param('nroOrden') nroOrden: string,
+    @Param('anoParlamentario') anoParlamentario: string,
+    @Query() filters: SearchExpedientesDto,
+  ) {
+    try {
+      const result = await this.legislaturaService.getBaeWithExpedientes(
+        parseInt(nroOrden),
+        parseInt(anoParlamentario),
+        filters,
+      );
+      return { success: true, ...result };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('sync/bae')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sync a specific BAE by nroOrden and anoParlamentario' })
+  @ApiQuery({ name: 'nroOrden', required: true, type: Number })
+  @ApiQuery({ name: 'anoParlamentario', required: true, type: Number })
+  async triggerSyncBae(
+    @Query('nroOrden') nroOrden: string,
+    @Query('anoParlamentario') anoParlamentario: string,
+  ) {
+    try {
+      if (!nroOrden || !anoParlamentario) {
+        throw new HttpException('nroOrden and anoParlamentario are required', HttpStatus.BAD_REQUEST);
+      }
+
+      console.log(nroOrden, anoParlamentario)
+      const result = await this.legislaturaService.syncBae(
+        parseInt(nroOrden),
+        parseInt(anoParlamentario),
+      );
+      return { success: true, ...result };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('sync/bae/latest')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check and sync the latest BAE for the current year' })
+  async triggerSyncLatestBae() {
+    try {
+      const result = await this.legislaturaService.syncLatestBae();
+      return { success: true, ...result };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('sync/bae/year')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sync all BAEs for a specific year (for Postman/admin use)' })
+  @ApiQuery({ name: 'anoParlamentario', required: true, type: Number })
+  async triggerSyncBaeByYear(
+    @Query('anoParlamentario') anoParlamentario: string,
+  ) {
+    try {
+      if (!anoParlamentario) {
+        throw new HttpException('anoParlamentario is required', HttpStatus.BAD_REQUEST);
+      }
+      const result = await this.legislaturaService.syncBaesByYear(parseInt(anoParlamentario));
+      return { success: true, ...result };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }

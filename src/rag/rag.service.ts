@@ -204,9 +204,9 @@ INSTRUCCIONES:
       /*if (filters?.categories && filters.categories.length > 0) {
         query['metadata.aiCategory'] = { $in: filters.categories };
       }*/
-      if (filters?.tipo) {
+      /*if (filters?.tipo) {
         query['metadata.tipo'] = filters.tipo;
-      }
+      }*/
 
 
       if (filters?.dateRange) {

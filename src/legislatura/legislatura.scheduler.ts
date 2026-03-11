@@ -153,4 +153,49 @@ export class LegislaturaScheduler {
       this.logger.error('Weekly stats failed:', error);
     }
   }
+
+  /**
+   * Sync giros (comisiones) for recent expedientes daily at 03:00 AM Buenos Aires time.
+   * Re-fetches commission assignments for expedientes from the last 6 months so the
+   * filter-by-comision always reflects the latest data from the external API.
+   */
+  @Cron('0 3 * * *', {
+    name: 'legislaturaGirosSync',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async handleGirosSync() {
+    if (!this.enabled) return;
+
+    try {
+      this.logger.log('Starting daily giros+ubicacion sync...');
+      const result = await this.legislaturaService.syncGirosForRecentExpedientes(6, 0);
+      this.logger.log(`Giros+ubicacion sync completed: ${result.updated}/${result.total} expedientes updated`);
+    } catch (error) {
+      this.logger.error('Daily giros+ubicacion sync failed:', error.message);
+    }
+  }
+
+  /**
+   * Check for new BAE every Monday and Thursday at 08:00 AM Buenos Aires time.
+   * BAEs are published roughly every 1-2 weeks.
+   */
+  @Cron('0 8 * * 1,4', {
+    name: 'legislaturaBaeSync',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async handleBaeSync() {
+    if (!this.enabled) return;
+
+    try {
+      this.logger.log('Checking for new BAE...');
+      const result = await this.legislaturaService.syncLatestBae();
+      if (result.synced) {
+        this.logger.log(`New BAE found and synced: ${result.nroOrden}-${result.anoParlamentario}, ${result.newExpedientes} new expedientes`);
+      } else {
+        this.logger.log('No new BAE found');
+      }
+    } catch (error) {
+      this.logger.error('BAE sync failed:', error.message);
+    }
+  }
 }
