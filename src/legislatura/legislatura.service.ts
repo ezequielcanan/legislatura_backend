@@ -10,7 +10,7 @@ import { Legislador, LegisladorDocument } from './schema/legislador.schema';
 import { Expediente, ExpedienteDocument, ExpedienteStatus } from './schema/expediente.schema';
 import { LegislaturaSync, LegislaturaSyncDocument, SyncStatus } from './schema/legislatura-sync.schema';
 import { Bae, BaeDocument } from './schema/bae.schema';
-import { Embedding, EmbeddingDocument, EmbeddingSourceType, VectorProvider } from '../embedding/schema/embedding.schema';
+import { Embedding, EmbeddingDocument, EmbeddingSourceType, VectorProvider, ChunkType } from '../embedding/schema/embedding.schema';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
@@ -225,6 +225,9 @@ export class LegislaturaService {
 
   async syncTodayExpedientes(): Promise<{ newExpedientes: number; totalFound: number }> {
     const syncRecord = await this.getOrCreateSyncRecord();
+    //const asd = await this.legislaturaProducer.getQueueMetrics()
+    //console.log(asd)
+
 
     try {
       await this.syncModel.updateOne(
@@ -514,23 +517,78 @@ export class LegislaturaService {
         expediente.aiCategory = category;
       }
 
-      // Step 3: Create embeddings
+      // Step 3: Create embeddings — smaller chunks with stored text for RAG retrieval
       expediente.status = ExpedienteStatus.EMBEDDING;
       await expediente.save();
 
-      const textToEmbed = [
-        expediente.sumario,
-        expediente.aiSummary || '',
-        fullText.substring(0, 8000),
-      ].filter(Boolean).join('\n\n');
+      // Metadata prefix for contextual embeddings
+      const metaPrefix = `Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || ''}\n${expediente.titulo || expediente.sumario}\n`;
 
-      if (textToEmbed.length > 20) {
-        const chunks = this.chunkText(textToEmbed, 6000, 1000);
-        let embeddingCount = 0;
+      let embeddingCount = 0;
 
-        for (let i = 0; i < chunks.length; i++) {
+      // 3a. Summary embedding (highly dense — boosts recall)
+      const summaryText = [
+        metaPrefix,
+        `Resumen: ${expediente.aiSummary || expediente.sumario || ''}`,
+        expediente.aiTags?.length ? `Tags: ${expediente.aiTags.join(', ')}` : '',
+      ].filter(Boolean).join('\n');
+
+      if (summaryText.length > 30) {
+        try {
+          const vector = await this.openRouterService.generateEmbedding(summaryText);
+          await this.embeddingModel.create({
+            sourceType: EmbeddingSourceType.DOCUMENT,
+            sourceId: expediente._id,
+            vector,
+            provider: VectorProvider.MONGO,
+            model: 'text-embedding-3-small',
+            dims: vector.length,
+            chunkText: summaryText,
+            chunkType: ChunkType.SUMMARY,
+            snippet: summaryText.substring(0, 500),
+            metadata: {
+              expedienteId: expediente.expedienteId,
+              numero: expediente.numero,
+              tipo: expediente.tipo,
+              aiTags: expediente.aiTags,
+              aiCategory: expediente.aiCategory,
+              chunkIndex: 0,
+              totalChunks: 1,
+              chunkType: 'summary',
+              fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
+              baeSource: expediente.baeSource || false,
+            },
+            lastIndexedAt: new Date(),
+          });
+          embeddingCount++;
+        } catch (err) {
+          this.logger.warn(`Failed to create summary embedding for ${expedienteId}: ${err.message}`);
+        }
+      }
+
+      // 3b. Content chunk embeddings — Contextual Retrieval technique:
+      // Each chunk is embedded WITH a document-level context prefix so the
+      // vector captures both local content AND global document meaning.
+      if (fullText.length > 20) {
+        const contentChunks = this.chunkText(fullText, 1500, 200);
+        const totalChunks = contentChunks.length + 1; // +1 for summary
+
+        const autorStr = expediente.autor
+          ? `${expediente.autor.nombre} ${expediente.autor.apellido}`
+          : 'No especificado';
+
+        for (let i = 0; i < contentChunks.length; i++) {
           try {
-            const vector = await this.openRouterService.generateEmbedding(chunks[i]);
+            // Contextual prefix: global document context prepended to each chunk
+            const contextPrefix =
+              `[Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || 'Sin categoría'}]\n` +
+              `Título: ${(expediente.titulo || expediente.sumario || '').slice(0, 200)}\n` +
+              `Autor: ${autorStr} | Fecha: ${expediente.fechaIngreso || ''}\n` +
+              `Resumen: ${(expediente.aiSummary || expediente.sumario || '').slice(0, 300)}\n` +
+              `[Sección ${i + 1} de ${contentChunks.length}]\n---\n`;
+
+            const enrichedChunk = contextPrefix + contentChunks[i];
+            const vector = await this.openRouterService.generateEmbedding(enrichedChunk);
             await this.embeddingModel.create({
               sourceType: EmbeddingSourceType.DOCUMENT,
               sourceId: expediente._id,
@@ -538,15 +596,18 @@ export class LegislaturaService {
               provider: VectorProvider.MONGO,
               model: 'text-embedding-3-small',
               dims: vector.length,
-              snippet: chunks[i].substring(0, 500),
+              chunkText: enrichedChunk,
+              chunkType: ChunkType.CONTENT,
+              snippet: contentChunks[i].substring(0, 500),
               metadata: {
                 expedienteId: expediente.expedienteId,
                 numero: expediente.numero,
                 tipo: expediente.tipo,
                 aiTags: expediente.aiTags,
                 aiCategory: expediente.aiCategory,
-                chunkIndex: i,
-                totalChunks: chunks.length,
+                chunkIndex: i + 1,
+                totalChunks,
+                chunkType: 'content',
                 fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
                 baeSource: expediente.baeSource || false,
               },
@@ -560,8 +621,9 @@ export class LegislaturaService {
             throw new Error(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
           }
         }
-        expediente.embeddingCount = embeddingCount;
       }
+
+      expediente.embeddingCount = embeddingCount;
 
       // Done
       expediente.status = ExpedienteStatus.COMPLETED;

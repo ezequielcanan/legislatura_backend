@@ -13,7 +13,6 @@ import { OpenRouterService } from '../openrouter/openrouter.service';
 import { HttpModule } from '@nestjs/axios';
 import { ChatGateway } from './chat.gateway';
 import { AuthModule } from '../auth/auth.module';
-import { MemoryModule } from '../memory/memory.module';
 import { AgentModule } from '../agent/agent.module';
 import { AgentService } from '../agent/agent.service';
 import { RagModule } from '../rag/rag.module';
@@ -27,7 +26,6 @@ import { RagModule } from '../rag/rag.module';
       { name: 'Message', schema: MessageSchema },
       { name: 'Embedding', schema: EmbeddingSchema },
     ]),
-    forwardRef(() => MemoryModule),
     RagModule,
   ],
   controllers: [ChatController],

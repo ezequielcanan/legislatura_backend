@@ -11,8 +11,7 @@ import { OpenRouterService } from 'src/openrouter/openrouter.service';
 @Injectable()
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
-  private readonly openaiApiKey: string;
-  private readonly openaiBaseUrl: string = 'https://api.openai.com/v1';
+  private readonly vectorIndexName: string;
 
   constructor(
     @InjectModel(Embedding.name) private embeddingModel: Model<EmbeddingDocument>,
@@ -20,37 +19,7 @@ export class EmbeddingService {
     private httpService: HttpService,
     private openRouterService: OpenRouterService,
   ) {
-    //this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
-    // TODO: También podríamos usar OpenRouter para embeddings si lo soporta
-  }
-
-  async generateEmbedding(text: string, model: string = 'text-embedding-3-small'): Promise<number[]> {
-    if (!this.openaiApiKey) {
-      throw new Error('OPENAI_API_KEY is required for embeddings');
-    }
-
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.openaiBaseUrl}/embeddings`,
-          {
-            input: text,
-            model,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.openaiApiKey}`,
-              'Content-Type': 'application/json',
-            },
-          },
-        ),
-      );
-
-      return response.data.data[0].embedding;
-    } catch (error: any) {
-      this.logger.error('Failed to generate embedding:', error.response?.data || error.message);
-      throw new Error(`Embedding generation failed: ${error.message}`);
-    }
+    this.vectorIndexName = this.configService.get<string>('ATLAS_VECTOR_INDEX', 'vector_index');
   }
 
   async createMessageEmbedding(
@@ -59,7 +28,7 @@ export class EmbeddingService {
     metadata?: Record<string, any>,
   ): Promise<EmbeddingDocument> {
     const vector = await this.openRouterService.generateEmbedding(text);
-    const snippet = text.slice(0, 200); // Guardar snippet para debugging
+    const snippet = text.slice(0, 200);
 
     const embedding = new this.embeddingModel({
       sourceType: EmbeddingSourceType.MESSAGE,
@@ -68,6 +37,7 @@ export class EmbeddingService {
       provider: VectorProvider.MONGO,
       model: 'text-embedding-3-small',
       dims: vector.length,
+      chunkText: text,
       snippet,
       metadata,
       lastIndexedAt: new Date(),
@@ -76,42 +46,56 @@ export class EmbeddingService {
     return embedding.save();
   }
 
+  /**
+   * Find similar embeddings using MongoDB Atlas $vectorSearch.
+   * Requires an Atlas Vector Search index named `vector_index` on the `embeddings` collection.
+   */
   async findSimilarEmbeddings(
     vector: number[],
     userId: Types.ObjectId,
     limit: number = 5,
-    minSimilarity: number = 0.7,
+    minScore: number = 0.7,
   ): Promise<Array<{ embedding: EmbeddingDocument; similarity: number }>> {
-    // TODO: Implementar búsqueda vectorial usando MongoDB Atlas Vector Search
-    // Por ahora devolvemos resultados vacíos
-    return [];
-    
-    /*
-    // Ejemplo con MongoDB Atlas Vector Search (requiere índice):
-    const pipeline = [
-      {
-        $vectorSearch: {
-          index: "embedding_index",
-          path: "vector",
-          queryVector: vector,
-          numCandidates: 100,
-          limit: limit,
+    try {
+      const pipeline: any[] = [
+        {
+          $vectorSearch: {
+            index: this.vectorIndexName,
+            path: 'vector',
+            queryVector: vector,
+            numCandidates: limit * 10,
+            limit,
+            filter: {
+              sourceType: EmbeddingSourceType.MESSAGE,
+              deleted: { $ne: true },
+            },
+          },
         },
-      },
-      {
-        $project: {
-          _id: 1,
-          sourceType: 1,
-          sourceId: 1,
-          snippet: 1,
-          metadata: 1,
-          score: { $meta: "vectorSearchScore" },
+        {
+          $project: {
+            _id: 1,
+            sourceType: 1,
+            sourceId: 1,
+            chunkText: 1,
+            snippet: 1,
+            metadata: 1,
+            score: { $meta: 'vectorSearchScore' },
+          },
         },
-      },
-    ];
-    
-    return this.embeddingModel.aggregate(pipeline);
-    */
+      ];
+
+      const results = await this.embeddingModel.aggregate(pipeline).exec();
+
+      return results
+        .filter((r) => r.score >= minScore)
+        .map((r) => ({
+          embedding: r as unknown as EmbeddingDocument,
+          similarity: r.score,
+        }));
+    } catch (error) {
+      this.logger.error('Atlas Vector Search failed:', error);
+      return [];
+    }
   }
 
   async deleteEmbeddingsBySource(

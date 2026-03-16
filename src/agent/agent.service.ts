@@ -1,9 +1,5 @@
 // src/agent/agent.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { Types } from 'mongoose';
-import { ChatOpenAI } from '@langchain/openai';
-import { createAgent } from 'langchain';
 
 export interface QueryClassification {
   tags: string[];
@@ -16,92 +12,110 @@ export interface QueryClassification {
   refinedQuery: string;
 }
 
+// ─── Category / Tag keyword maps (zero-cost, no LLM) ────
+
+const TAG_KEYWORDS: Record<string, string[]> = {
+  educacion: ['educación', 'educacion', 'escuela', 'colegio', 'universidad', 'docente', 'alumno', 'estudiante', 'escolar', 'pedagog'],
+  salud: ['salud', 'hospital', 'clínica', 'clinica', 'médic', 'medic', 'sanitar', 'vacuna', 'farmacia', 'enferm'],
+  seguridad: ['seguridad', 'policía', 'policia', 'delito', 'crimen', 'vigilancia', 'penal', 'robo', 'inseguridad'],
+  transporte: ['transporte', 'tránsito', 'transito', 'colectivo', 'subte', 'metrobús', 'metrobus', 'bicicleta', 'ciclovia', 'estacion'],
+  vivienda: ['vivienda', 'viviendas', 'inmueble', 'alquiler', 'inquilino', 'habitat', 'urbanización', 'urbanizacion'],
+  economia: ['economía', 'economia', 'impuesto', 'tributar', 'presupuesto', 'fiscal', 'financier', 'comercio', 'emprendedor'],
+  cultura: ['cultura', 'cultural', 'museo', 'teatro', 'biblioteca', 'patrimonio', 'artíst', 'artist'],
+  ambiente: ['ambiente', 'ambiental', 'ecolog', 'contaminación', 'contaminacion', 'residuo', 'basura', 'reciclaje', 'verde', 'arbol'],
+  tecnologia: ['tecnología', 'tecnologia', 'digital', 'internet', 'software', 'sistema', 'datos', 'ciberseguridad'],
+  trabajo: ['trabajo', 'empleo', 'laboral', 'trabajador', 'sindicato', 'gremio', 'sueldo', 'salar'],
+  justicia: ['justicia', 'judicial', 'juicio', 'tribunal', 'penal', 'defensor', 'amparo'],
+  derechos_humanos: ['derechos humanos', 'discriminación', 'discriminacion', 'igualdad', 'género', 'genero', 'diversidad', 'inclusión', 'inclusion'],
+  presupuesto: ['presupuesto', 'gasto', 'partida', 'erogación', 'erogacion', 'hacienda'],
+  gobierno: ['gobierno', 'administración', 'administracion', 'decreto', 'ejecutivo', 'ministerio'],
+};
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  'Proyecto de Ley': ['ley', 'legislar', 'proyecto de ley', 'legislación', 'legislacion'],
+  'Proyecto de Resolución': ['resolución', 'resolucion', 'proyecto de resolución'],
+  'Proyecto de Declaración': ['declaración', 'declaracion', 'proyecto de declaración'],
+  'Comunicación': ['comunicación', 'comunicacion'],
+  'Pedido de informes': ['pedido de informe', 'solicitud de informe', 'requerir informe'],
+};
+
+const INTENT_PATTERNS: [RegExp, QueryClassification['intent']][] = [
+  [/\b(legislador|diputad|senador)\b/i, 'legislador_info'],
+  [/\b(bloque|partido|bancada|coalición|coalicion)\b/i, 'bloque_info'],
+  [/\b(estadística|estadistica|cuánt|cuant|total|porcentaje|promedio|cifra)\b/i, 'stats'],
+  [/\b(hola|buenos días|buenos dias|buenas tardes|buenas noches|saludos|gracias)\b/i, 'general_chat'],
+];
+
 @Injectable()
 export class AgentService {
   private readonly logger = new Logger(AgentService.name);
 
-  constructor() { }
+  constructor() {}
 
   /**
-   * Classifies a user query to extract structured filters for intelligent RAG search.
-   * Uses an LLM to analyze the question and return tags, categories, date ranges, etc.
+   * Lightweight, zero-cost query classification using keyword matching.
+   * No LLM call — runs in <1 ms.
    */
-  async classifyQuery(userQuery: string): Promise<QueryClassification> {
-    try {
-      const llm = new ChatOpenAI({
-        model: process.env.OPENROUTER_DEFAULT_MODEL ?? 'x-ai/grok-4.1-fast',
-        streaming: false,
-        apiKey: process.env.OPENROUTER_API_KEY,
-        configuration: {
-          baseURL: process.env.OPENROUTER_API_URL,
-        },
-        temperature: 0,
-      });
+  classifyQuery(userQuery: string): QueryClassification {
+    const q = userQuery.toLowerCase().trim();
 
-      const now = new Date();
-      const buenosAiresNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));
-      const todayStr = buenosAiresNow.toISOString().split('T')[0];
-
-      const systemPrompt = `You are a query classifier for the Buenos Aires City Legislature system.
-Given a user question in Spanish, extract structured metadata to optimize document search.
-
-Current date: ${todayStr}
-
-Return ONLY valid JSON with this exact structure:
-{
-  "tags": [],           // Relevant topic tags (e.g. "educacion", "transporte", "salud", "seguridad", "medio ambiente", "presupuesto", "vivienda")
-  "categories": [],     // Document categories (e.g. "Ley", "Decreto", "Resolucion", "Declaracion", "Comunicacion", "Pedido de informes")
-  "tipo": null,         // Exact expediente tipo if mentioned (e.g. "Proyecto de Ley", "Proyecto de Resolución")
-  "legisladorName": null,  // Legislator name if mentioned
-  "bloqueName": null,      // Political bloc name if mentioned
-  "dateRange": null,       // { "from": "dd/mm/yyyy", "to": "dd/mm/yyyy" } if temporal reference detected
-  "intent": "search_expedientes",  // One of: "search_expedientes", "legislador_info", "bloque_info", "general_chat", "stats"
-  "refinedQuery": ""       // A refined version of the query optimized for semantic search
-}
-
-Rules:
-- Extract tags from the topic/subject of the question
-- If user mentions "this week", "today", "last month", calculate actual dates
-- If user asks about a specific legislator, set intent to "legislador_info"
-- If user asks about a bloc/party, set intent to "bloque_info"
-- If user asks for statistics or numbers, set intent to "stats"
-- If it's a general greeting or unrelated question, set intent to "general_chat"
-- refinedQuery should be a clear, concise version of what the user wants to find`;
-
-      const response = await llm.invoke([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userQuery },
-      ]);
-
-      const content = typeof response.content === 'string' ? response.content : '';
-
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        this.logger.warn('Could not parse query classification, using defaults');
-        return this.defaultClassification(userQuery);
+    // Intent detection
+    let intent: QueryClassification['intent'] = 'search_expedientes';
+    for (const [pattern, detected] of INTENT_PATTERNS) {
+      if (pattern.test(q)) {
+        intent = detected;
+        break;
       }
-
-      const parsed = JSON.parse(jsonMatch[0]) as QueryClassification;
-      this.logger.debug(`Query classified: intent=${parsed.intent}, tags=${parsed.tags.join(',')}`);
-      this.logger.debug(parsed)
-      return parsed;
-    } catch (error) {
-      this.logger.error('Query classification failed:', error);
-      return this.defaultClassification(userQuery);
     }
-  }
 
-  private defaultClassification(query: string): QueryClassification {
+    // Tag extraction
+    const tags: string[] = [];
+    for (const [tag, keywords] of Object.entries(TAG_KEYWORDS)) {
+      for (const kw of keywords) {
+        if (q.includes(kw)) {
+          tags.push(tag);
+          break;
+        }
+      }
+    }
+
+    // Category extraction
+    const categories: string[] = [];
+    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+      for (const kw of keywords) {
+        if (q.includes(kw)) {
+          categories.push(cat);
+          break;
+        }
+      }
+    }
+
+    // Tipo detection
+    let tipo: string | null = null;
+    const tipoMatch = q.match(/proyecto de (ley|resolución|resolucion|declaración|declaracion|comunicación|comunicacion)/i);
+    if (tipoMatch) {
+      tipo = `Proyecto de ${tipoMatch[1].charAt(0).toUpperCase()}${tipoMatch[1].slice(1)}`;
+    }
+
+    // Legislador name extraction
+    let legisladorName: string | null = null;
+    const legMatch = q.match(/(?:legislador|diputad[oa]|senador[a]?)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,2})/i);
+    if (legMatch) legisladorName = legMatch[1].trim();
+
+    // Bloque name extraction
+    let bloqueName: string | null = null;
+    const bloqueMatch = q.match(/(?:bloque|partido)\s+(?:de\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3})/i);
+    if (bloqueMatch) bloqueName = bloqueMatch[1].trim();
+
     return {
-      tags: [],
-      categories: [],
-      tipo: null,
-      legisladorName: null,
-      bloqueName: null,
+      tags,
+      categories,
+      tipo,
+      legisladorName,
+      bloqueName,
       dateRange: null,
-      intent: 'search_expedientes',
-      refinedQuery: query,
+      intent,
+      refinedQuery: userQuery,
     };
   }
 }

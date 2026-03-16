@@ -1,0 +1,31 @@
+# MongoDB
+pymongo[srv]==4.12.1
+dnspython==2.7.0
+
+# PDF processing
+pypdf==5.4.0
+pdfplumber==0.11.6
+requests==2.32.3
+
+# Embeddings & NLP
+tiktoken==0.9.0
+sentence-transformers==4.1.0
+rank-bm25==0.2.2
+numpy==2.2.6
+
+# Pinecone vector database (legacy — kept for migration)
+pinecone==6.0.2
+
+# Qdrant vector database (active)
+qdrant-client>=1.16,<1.18
+
+# LLM
+openai==1.82.0
+
+# Utilities
+python-dotenv==1.1.0
+tqdm==4.67.1
+rich==14.0.0
+
+# Optional: Redis for semantic cache
+redis==5.3.0

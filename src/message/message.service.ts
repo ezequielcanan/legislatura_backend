@@ -7,7 +7,6 @@ import { ConversationService } from '../conversation/conversation.service';
 import { EmbeddingService } from '../embedding/embedding.service';
 import { CreateMessageDto } from './dto/message.dto';
 import { ConfigService } from '@nestjs/config';
-import { MemoryService } from 'src/memory/memory.service';
 
 @Injectable()
 export class MessageService {
@@ -18,7 +17,6 @@ export class MessageService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private conversationService: ConversationService,
     private embeddingService: EmbeddingService,
-    private memoryService: MemoryService,
     private configService: ConfigService,
   ) {
     this.enableEmbeddings = this.configService.get<boolean>('ENABLE_EMBEDDINGS', true);

@@ -9,7 +9,6 @@ import { StorageModule } from './storage/storage.module';
 import { OpenRouterModule } from './openrouter/openrouter.module';
 import { ConversationModule } from './conversation/conversation.module';
 import { MessageModule } from './message/message.module';
-import { MemoryModule } from './memory/memory.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ChatModule } from './chat/chat.module';

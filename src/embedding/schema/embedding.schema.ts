@@ -16,6 +16,11 @@ export enum VectorProvider {
   PINECONE = 'pinecone',   // store vector in Pinecone and reference it here
 }
 
+export enum ChunkType {
+  SUMMARY = 'summary',     // AI-generated summary + metadata
+  CONTENT = 'content',     // Actual document content chunk
+}
+
 @Schema({ timestamps: true })
 export class Embedding {
   @Prop({ type: String, enum: Object.values(EmbeddingSourceType), required: true })
@@ -24,7 +29,7 @@ export class Embedding {
   @Prop({ type: Types.ObjectId, required: true })
   sourceId: Types.ObjectId;
 
-  // If provider === 'mongo', vector may be present here.
+  // Vector stored in MongoDB for Atlas Vector Search ($vectorSearch)
   @Prop({ type: [Number], required: false, select: false })
   vector?: number[] | null;
 
@@ -41,8 +46,16 @@ export class Embedding {
   @Prop({ type: Number, default: 0 })
   dims?: number;
 
+  // Full chunk text for retrieval context (returned by Atlas Vector Search)
   @Prop({ type: String, default: null })
-  snippet?: string; // small excerpt for debugging/reranking
+  chunkText?: string;
+
+  // Chunk type: 'summary' for AI-generated summary, 'content' for document content
+  @Prop({ type: String, enum: Object.values(ChunkType), default: ChunkType.CONTENT })
+  chunkType?: ChunkType;
+
+  @Prop({ type: String, default: null })
+  snippet?: string; // small excerpt for debugging (legacy, replaced by chunkText)
 
   @Prop({ type: Object, default: {} })
   metadata?: Record<string, any>;
@@ -56,7 +69,36 @@ export class Embedding {
 
 export const EmbeddingSchema = SchemaFactory.createForClass(Embedding);
 
-// Índices útiles
+// Standard indexes
 EmbeddingSchema.index({ sourceType: 1, sourceId: 1 });
+EmbeddingSchema.index({ sourceType: 1, deleted: 1 });
 EmbeddingSchema.index({ provider: 1, externalId: 1 });
 EmbeddingSchema.index({ model: 1 });
+
+/**
+ * IMPORTANT: MongoDB Atlas Vector Search Index
+ * 
+ * You must create this index via the Atlas UI / CLI / API.
+ * Index name: "vector_index"
+ * Collection: "embeddings"
+ * 
+ * Index definition (JSON):
+ * {
+ *   "fields": [
+ *     {
+ *       "type": "vector",
+ *       "path": "vector",
+ *       "numDimensions": 1536,
+ *       "similarity": "cosine"
+ *     },
+ *     {
+ *       "type": "filter",
+ *       "path": "sourceType"
+ *     },
+ *     {
+ *       "type": "filter",
+ *       "path": "deleted"
+ *     }
+ *   ]
+ * }
+ */

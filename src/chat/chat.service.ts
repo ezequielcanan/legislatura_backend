@@ -5,7 +5,6 @@ import { OpenRouterService } from '../openrouter/openrouter.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { MessageService } from '../message/message.service';
 import { MessageRole } from '../message/schema/message.schema';
-import { MemoryService } from '../memory/memory.service';
 import { AgentService } from '../agent/agent.service';
 import { RagService } from '../rag/rag.service';
 
@@ -19,7 +18,6 @@ export class ChatService {
     private conversationService: ConversationService,
     private agentService: AgentService,
     private messageService: MessageService,
-    private memoryService: MemoryService,
     private ragService: RagService,
   ) {
     this.systemPrompt = `Eres un asistente AI especializado en la Legislatura de la Ciudad Autónoma de Buenos Aires.
@@ -40,14 +38,21 @@ CAPACIDADES:
 
 DIRECTRICES:
 1. **Prioriza información de expedientes legislativos** cuando estén disponibles
-2. Cita específicamente los expedientes por su número (ej: "Expediente 1234-D-2024")
-3. Sé preciso con la información de legisladores y sus bloques
-4. Sé empático y natural en el tono
-5. Si no tienes información oficial, indícalo claramente
-6. Mantén un tono profesional pero accesible
-7. Cuando menciones proyectos, incluye su tipo, estado y autores si están disponibles
+2. **Cita SIEMPRE las fuentes** usando el formato [REF-N] cuando uses información de los expedientes proporcionados
+3. Cita específicamente los expedientes por su número (ej: "Expediente 1234-D-2024")
+4. Sé preciso con la información de legisladores y sus bloques
+5. Sé empático y natural en el tono
+6. Si no tienes información oficial, indícalo claramente — NUNCA inventes información
+7. Mantén un tono profesional pero accesible
+8. Cuando menciones proyectos, incluye su tipo, estado y autores si están disponibles
 
-EXPEDIENTES LEGISLATIVOS RELEVANTES:
+CITACIONES:
+- Cada expediente en el contexto tiene un identificador [REF-N] asociado
+- Cuando uses información de un expediente, incluye su [REF-N] al final de la oración o párrafo relevante
+- Si combinas información de múltiples expedientes, cita todos los relevantes: [REF-1][REF-3]
+- Si la información NO proviene de los expedientes proporcionados, indícalo explícitamente
+- Ejemplo: "El proyecto propone modificar la normativa de tránsito en la zona centro [REF-2]."
+
 {documents}`;
   }
 
@@ -64,14 +69,11 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
   ) {
     const { model, temperature, maxTokens, stream = true } = options;
 
-    // 1. Classify query to extract structured filters (intelligent RAG)
-    const classification = await this.agentService.classifyQuery(text);
-    //this.logger.debug(`Query classified: intent=${classification.intent}`);
+    // 1. Lightweight classification (zero-cost, no LLM call)
+    const classification = this.agentService.classifyQuery(text);
 
     // 2. Generate embedding of the user message
-    const qVec = await this.openRouterService.generateEmbedding(
-      classification.refinedQuery || text,
-    );
+    const qVec = await this.openRouterService.generateEmbedding(text);
 
     // 3. Save user message
     const userMessage = await this.messageService.createMessage(
@@ -84,25 +86,22 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
       qVec,
     );
 
-    // 4. **RAG: Search relevant expedientes with intelligent filtering**
-    const ragFilters: any = {};
-    if (classification.tags.length > 0) ragFilters.aiCategory = classification.tags[0];
-    //if (classification.tags.length > 0) ragFilters.tags = classification.tags;
-    if (classification.categories.length > 0) ragFilters.categories = classification.categories;
-    if (classification.tipo) ragFilters.tipo = classification.tipo;
-    if (classification.dateRange) ragFilters.dateRange = classification.dateRange;
+    // 4. RAG: Atlas Vector Search → keyword rerank → deduplicate → top N
+    const ragResult = await this.ragService.search(text, qVec);
 
-    const relevantDocuments = await this.ragService.searchRelevantDocuments(
-      classification.refinedQuery || text,
-      qVec,
-      50,
-      ragFilters,
-    );
+    const documentsContext = this.ragService.formatContextForLLM(ragResult);
 
-    
-    const documentsContext = this.ragService.formatDocumentsForContext(relevantDocuments);
-    
-    // 4. Obtener contexto conversacional
+    // Convert for backward-compatible emission
+    const relevantDocuments = ragResult.chunks.map((c) => {
+      const meta = ragResult.expedientes.get(c.sourceId);
+      return {
+        expedienteId: meta?.expedienteId ?? 0,
+        numero: meta?.numero ?? '',
+        similarity: c.score,
+      };
+    });
+
+    // 5. Conversational context (recent messages)
     const contextMessages = await this.messageService.getRelevantContext(
       new Types.ObjectId(conversationId),
       text,
@@ -110,20 +109,14 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
       10,
     );
 
-    //console.log(contextMessages)
-
-    // 6. Preparar mensajes para el LLM con contexto RAG
+    // 6. Build messages for LLM
     const messages = this.buildMessagesWithContext(
       text,
       contextMessages,
       documentsContext,
     );
 
-    //console.log(messages)
-
-
     if (stream) {
-      // Stream de respuesta
       const streamObservable = this.openRouterService.createChatCompletionStream(messages, {
         model,
         temperature,
@@ -133,11 +126,10 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
       return {
         stream: streamObservable,
         userMessageId: userMessage._id,
-        conversationId: conversationId,
-        relevantDocuments, // Incluir documentos en la respuesta
+        conversationId,
+        relevantDocuments,
       };
     } else {
-      // Respuesta sin stream
       const response = await this.openRouterService.createChatCompletion(messages, {
         model,
         temperature,
@@ -155,11 +147,7 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
           model: response.model,
           tokenCount: response.usage?.total_tokens,
           finishReason: response.choices[0].finish_reason,
-          relevantDocuments: relevantDocuments.map((d) => ({
-            expedienteId: d.expedienteId,
-            numero: d.numero,
-            similarity: d.similarity,
-          })),
+          relevantDocuments,
         },
       });
 
@@ -177,16 +165,14 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
     contextMessages: any[],
     documentsContext: string,
   ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-    // Filtrar el mensaje actual del contexto si ya está incluido (evitar duplicados)
     const filteredContext = contextMessages.filter(
       msg => msg.role !== MessageRole.USER || msg.text !== currentMessage
     );
-    
+
     const reversedMessages = [...filteredContext].reverse();
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 
-    // System prompt con todos los contextos
     messages.push({
       role: 'system',
       content: this.systemPrompt
@@ -194,7 +180,6 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
         .replace('{current_date}', new Date().toLocaleDateString('es-AR')),
     });
 
-    // Agregar historial de mensajes (limitado)
     let tokenCount = 0;
     const maxTokens = 2000;
 
@@ -209,7 +194,6 @@ EXPEDIENTES LEGISLATIVOS RELEVANTES:
       tokenCount += estimatedTokens;
     }
 
-    // Agregar mensaje actual
     messages.push({
       role: 'user',
       content: currentMessage,
