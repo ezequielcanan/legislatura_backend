@@ -16,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
 import { AgentModule } from '../agent/agent.module';
 import { AgentService } from '../agent/agent.service';
 import { RagModule } from '../rag/rag.module';
+import { PythonRagService } from '../rag/python-rag.service';
 
 @Module({
   imports: [

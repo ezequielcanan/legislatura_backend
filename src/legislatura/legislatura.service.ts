@@ -12,6 +12,7 @@ import { LegislaturaSync, LegislaturaSyncDocument, SyncStatus } from './schema/l
 import { Bae, BaeDocument } from './schema/bae.schema';
 import { Embedding, EmbeddingDocument, EmbeddingSourceType, VectorProvider, ChunkType } from '../embedding/schema/embedding.schema';
 import { OpenRouterService } from '../openrouter/openrouter.service';
+import { PythonRagService } from '../rag/python-rag.service';
 const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 import { LegislaturaProducer } from './legislatura.producer';
@@ -68,6 +69,7 @@ export class LegislaturaService {
     private httpService: HttpService,
     private configService: ConfigService,
     private openRouterService: OpenRouterService,
+    private pythonRagService: PythonRagService,
     private legislaturaProducer: LegislaturaProducer,
   ) {
     this.xmlParser = new XMLParser({
@@ -517,110 +519,44 @@ export class LegislaturaService {
         expediente.aiCategory = category;
       }
 
-      // Step 3: Create embeddings — smaller chunks with stored text for RAG retrieval
+      // Step 3: Create embeddings — index into Qdrant via Python RAG (preferred)
+      // or fallback to MongoDB embeddings if Python service is unavailable
       expediente.status = ExpedienteStatus.EMBEDDING;
       await expediente.save();
 
-      // Metadata prefix for contextual embeddings
-      const metaPrefix = `Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || ''}\n${expediente.titulo || expediente.sumario}\n`;
-
       let embeddingCount = 0;
 
-      // 3a. Summary embedding (highly dense — boosts recall)
-      const summaryText = [
-        metaPrefix,
-        `Resumen: ${expediente.aiSummary || expediente.sumario || ''}`,
-        expediente.aiTags?.length ? `Tags: ${expediente.aiTags.join(', ')}` : '',
-      ].filter(Boolean).join('\n');
-
-      if (summaryText.length > 30) {
+      // Try Python RAG service first (indexes into Qdrant + BM25)
+      if (this.pythonRagService.isAvailable) {
         try {
-          const vector = await this.openRouterService.generateEmbedding(summaryText);
-          await this.embeddingModel.create({
-            sourceType: EmbeddingSourceType.DOCUMENT,
-            sourceId: expediente._id,
-            vector,
-            provider: VectorProvider.MONGO,
-            model: 'text-embedding-3-small',
-            dims: vector.length,
-            chunkText: summaryText,
-            chunkType: ChunkType.SUMMARY,
-            snippet: summaryText.substring(0, 500),
-            metadata: {
-              expedienteId: expediente.expedienteId,
-              numero: expediente.numero,
-              tipo: expediente.tipo,
-              aiTags: expediente.aiTags,
-              aiCategory: expediente.aiCategory,
-              chunkIndex: 0,
-              totalChunks: 1,
-              chunkType: 'summary',
-              fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
-              baeSource: expediente.baeSource || false,
-            },
-            lastIndexedAt: new Date(),
+          const indexResult = await this.pythonRagService.indexExpediente({
+            expedienteId: expediente.expedienteId,
+            numero: expediente.numero,
+            tipo: expediente.tipo,
+            titulo: expediente.titulo || expediente.sumario || '',
+            sumario: expediente.sumario || '',
+            aiSummary: expediente.aiSummary || '',
+            aiTags: expediente.aiTags || [],
+            aiCategory: expediente.aiCategory || '',
+            fechaIngreso: expediente.fechaIngreso || '',
+            pdfText: fullText || '',
+            baeSource: expediente.baeSource || false,
+            autor: expediente.autor || null,
           });
-          embeddingCount++;
+          embeddingCount = indexResult.indexed;
+          this.logger.log(
+            `Expediente ${expedienteId} indexed via Python RAG: ${embeddingCount} chunks in ${indexResult.elapsed_ms}ms`,
+          );
         } catch (err) {
-          this.logger.warn(`Failed to create summary embedding for ${expedienteId}: ${err.message}`);
+          this.logger.warn(
+            `Python RAG indexing failed for ${expedienteId}, falling back to MongoDB: ${err.message}`,
+          );
+          // Fallback to MongoDB embeddings below
+          embeddingCount = await this.createMongoEmbeddings(expediente, fullText);
         }
-      }
-
-      // 3b. Content chunk embeddings — Contextual Retrieval technique:
-      // Each chunk is embedded WITH a document-level context prefix so the
-      // vector captures both local content AND global document meaning.
-      if (fullText.length > 20) {
-        const contentChunks = this.chunkText(fullText, 1500, 200);
-        const totalChunks = contentChunks.length + 1; // +1 for summary
-
-        const autorStr = expediente.autor
-          ? `${expediente.autor.nombre} ${expediente.autor.apellido}`
-          : 'No especificado';
-
-        for (let i = 0; i < contentChunks.length; i++) {
-          try {
-            // Contextual prefix: global document context prepended to each chunk
-            const contextPrefix =
-              `[Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || 'Sin categoría'}]\n` +
-              `Título: ${(expediente.titulo || expediente.sumario || '').slice(0, 200)}\n` +
-              `Autor: ${autorStr} | Fecha: ${expediente.fechaIngreso || ''}\n` +
-              `Resumen: ${(expediente.aiSummary || expediente.sumario || '').slice(0, 300)}\n` +
-              `[Sección ${i + 1} de ${contentChunks.length}]\n---\n`;
-
-            const enrichedChunk = contextPrefix + contentChunks[i];
-            const vector = await this.openRouterService.generateEmbedding(enrichedChunk);
-            await this.embeddingModel.create({
-              sourceType: EmbeddingSourceType.DOCUMENT,
-              sourceId: expediente._id,
-              vector,
-              provider: VectorProvider.MONGO,
-              model: 'text-embedding-3-small',
-              dims: vector.length,
-              chunkText: enrichedChunk,
-              chunkType: ChunkType.CONTENT,
-              snippet: contentChunks[i].substring(0, 500),
-              metadata: {
-                expedienteId: expediente.expedienteId,
-                numero: expediente.numero,
-                tipo: expediente.tipo,
-                aiTags: expediente.aiTags,
-                aiCategory: expediente.aiCategory,
-                chunkIndex: i + 1,
-                totalChunks,
-                chunkType: 'content',
-                fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
-                baeSource: expediente.baeSource || false,
-              },
-              lastIndexedAt: new Date(),
-            });
-            embeddingCount++;
-          } catch (err) {
-            expediente.status = ExpedienteStatus.FAILED;
-            expediente.errorMessage = err.message;
-            await expediente.save();
-            throw new Error(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
-          }
-        }
+      } else {
+        // Python RAG not available — use MongoDB embeddings (legacy)
+        embeddingCount = await this.createMongoEmbeddings(expediente, fullText);
       }
 
       expediente.embeddingCount = embeddingCount;
@@ -695,6 +631,110 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       this.logger.warn(`AI summary/tag generation failed for ${expediente.expedienteId}: ${error.message}`);
       return { summary: expediente.sumario, tags: [], category: 'otro' };
     }
+  }
+
+  // ─── MONGO EMBEDDINGS FALLBACK ───────────────────────────
+
+  /**
+   * Legacy MongoDB DOCUMENT embedding creation (used when Python RAG service is unavailable).
+   */
+  private async createMongoEmbeddings(expediente: ExpedienteDocument, fullText: string): Promise<number> {
+    const expedienteId = expediente.expedienteId;
+    const metaPrefix = `Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || ''}\n${expediente.titulo || expediente.sumario}\n`;
+
+    let embeddingCount = 0;
+
+    // Summary embedding
+    const summaryText = [
+      metaPrefix,
+      `Resumen: ${expediente.aiSummary || expediente.sumario || ''}`,
+      expediente.aiTags?.length ? `Tags: ${expediente.aiTags.join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+
+    if (summaryText.length > 30) {
+      try {
+        const vector = await this.openRouterService.generateEmbedding(summaryText);
+        await this.embeddingModel.create({
+          sourceType: EmbeddingSourceType.DOCUMENT,
+          sourceId: expediente._id,
+          vector,
+          provider: VectorProvider.MONGO,
+          model: 'text-embedding-3-small',
+          dims: vector.length,
+          chunkText: summaryText,
+          chunkType: ChunkType.SUMMARY,
+          snippet: summaryText.substring(0, 500),
+          metadata: {
+            expedienteId,
+            numero: expediente.numero,
+            tipo: expediente.tipo,
+            aiTags: expediente.aiTags,
+            aiCategory: expediente.aiCategory,
+            chunkIndex: 0,
+            totalChunks: 1,
+            chunkType: 'summary',
+            fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
+            baeSource: expediente.baeSource || false,
+          },
+          lastIndexedAt: new Date(),
+        });
+        embeddingCount++;
+      } catch (err) {
+        this.logger.warn(`Failed to create summary embedding for ${expedienteId}: ${err.message}`);
+      }
+    }
+
+    // Content chunk embeddings
+    if (fullText.length > 20) {
+      const contentChunks = this.chunkText(fullText, 1500, 200);
+      const totalChunks = contentChunks.length + 1;
+      const autorStr = expediente.autor
+        ? `${expediente.autor.nombre} ${expediente.autor.apellido}`
+        : 'No especificado';
+
+      for (let i = 0; i < contentChunks.length; i++) {
+        try {
+          const contextPrefix =
+            `[Expediente ${expediente.numero} | ${expediente.tipo} | ${expediente.aiCategory || 'Sin categoría'}]\n` +
+            `Título: ${(expediente.titulo || expediente.sumario || '').slice(0, 200)}\n` +
+            `Autor: ${autorStr} | Fecha: ${expediente.fechaIngreso || ''}\n` +
+            `Resumen: ${(expediente.aiSummary || expediente.sumario || '').slice(0, 300)}\n` +
+            `[Sección ${i + 1} de ${contentChunks.length}]\n---\n`;
+
+          const enrichedChunk = contextPrefix + contentChunks[i];
+          const vector = await this.openRouterService.generateEmbedding(enrichedChunk);
+          await this.embeddingModel.create({
+            sourceType: EmbeddingSourceType.DOCUMENT,
+            sourceId: expediente._id,
+            vector,
+            provider: VectorProvider.MONGO,
+            model: 'text-embedding-3-small',
+            dims: vector.length,
+            chunkText: enrichedChunk,
+            chunkType: ChunkType.CONTENT,
+            snippet: contentChunks[i].substring(0, 500),
+            metadata: {
+              expedienteId,
+              numero: expediente.numero,
+              tipo: expediente.tipo,
+              aiTags: expediente.aiTags,
+              aiCategory: expediente.aiCategory,
+              chunkIndex: i + 1,
+              totalChunks,
+              chunkType: 'content',
+              fechaIngreso: this.parseDateString(expediente.fechaIngreso) as any,
+              baeSource: expediente.baeSource || false,
+            },
+            lastIndexedAt: new Date(),
+          });
+          embeddingCount++;
+        } catch (err) {
+          throw new Error(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
+        }
+      }
+    }
+
+    return embeddingCount;
   }
 
   // ─── SEARCH & QUERY ─────────────────────────────────────
@@ -1173,14 +1213,16 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
     const items = await this.fetchBaeItems(nroOrden, anoParlamentario);
     this.logger.log(`BAE ${nroOrden}-${anoParlamentario}: found ${items.length} items`);
 
-    // Get existing expediente IDs
+    // Get existing expedientes — index by both expedienteId and numero
     const existingExpedientes = await this.expedienteModel.find(
       {},
-      { expedienteId: 1, baeReferences: 1 },
+      { expedienteId: 1, numero: 1, baeReferences: 1 },
     ).lean().exec();
-    const existingMap = new Map<number, any>();
+    const existingByIdMap = new Map<number, any>();
+    const existingByNumeroMap = new Map<string, any>();
     for (const e of existingExpedientes) {
-      existingMap.set(e.expedienteId, e);
+      existingByIdMap.set(e.expedienteId, e);
+      if (e.numero) existingByNumeroMap.set(e.numero.toUpperCase().replace(/\s+/g, ''), e);
     }
 
     let newCount = 0;
@@ -1189,17 +1231,35 @@ Tags should be specific and relevant keywords in Spanish. Choose the single most
       if (!documentoId || isNaN(documentoId)) continue;
 
       const baeRef = { nroOrden, anoParlamentario };
-      const existing = existingMap.get(documentoId);
+
+      // Try matching by expedienteId first, then by numero as fallback
+      let existing = existingByIdMap.get(documentoId);
+      if (!existing && item.nro_de_expediente) {
+        const normalizedNumero = String(item.nro_de_expediente).toUpperCase().replace(/\s+/g, '');
+        existing = existingByNumeroMap.get(normalizedNumero);
+      }
 
       if (existing) {
-        // Expediente already exists - add BAE reference if not already present
+        // Expediente already exists — add BAE reference + update BAE metadata
         const alreadyReferenced = (existing.baeReferences || []).some(
           (r: any) => r.nroOrden === nroOrden && r.anoParlamentario === anoParlamentario,
         );
+        const updateOps: any = {};
         if (!alreadyReferenced) {
+          updateOps.$addToSet = { baeReferences: baeRef };
+        }
+        // Update BAE-specific fields on existing expedientes
+        const setFields: any = {};
+        if (item.bae_grupo_des) setFields.baeGrupo = item.bae_grupo_des;
+        if (item.orden) setFields.baeOrden = parseInt(item.orden) || 0;
+        if (item.descripcion_bae) setFields.baeDescripcion = item.descripcion_bae;
+        if (Object.keys(setFields).length > 0) {
+          updateOps.$set = setFields;
+        }
+        if (Object.keys(updateOps).length > 0) {
           await this.expedienteModel.updateOne(
-            { expedienteId: documentoId },
-            { $addToSet: { baeReferences: baeRef } },
+            { _id: existing._id },
+            updateOps,
           );
         }
         continue;

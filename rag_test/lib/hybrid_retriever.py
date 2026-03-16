@@ -632,3 +632,24 @@ class HybridRetriever:
             pickle.dump(chunks, f)
 
         print(f"[BM25] Built and saved index with {len(chunks)} documents")
+
+    def add_documents(self, new_docs: List[Dict]):
+        """
+        Add new documents to the in-memory corpus and rebuild BM25 index.
+        Each doc: {key, text, metadata}
+        Also persists the updated index to disk.
+        """
+        self.corpus.extend(new_docs)
+
+        # Rebuild BM25 from full corpus
+        tokenized = [self._tokenize_spanish(doc["text"]) for doc in self.corpus]
+        self.bm25 = BM25Okapi(tokenized)
+
+        # Persist to disk
+        os.makedirs(BM25_INDEX_PATH.parent, exist_ok=True)
+        with open(BM25_INDEX_PATH, "wb") as f:
+            pickle.dump(self.bm25, f)
+        with open(BM25_CORPUS_PATH, "wb") as f:
+            pickle.dump(self.corpus, f)
+
+        print(f"[BM25] Updated index: now {len(self.corpus)} documents")

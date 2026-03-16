@@ -5,6 +5,7 @@ import { HttpModule } from '@nestjs/axios';
 import { Embedding, EmbeddingSchema } from '../embedding/schema/embedding.schema';
 import { Expediente, ExpedienteSchema } from '../legislatura/schema/expediente.schema';
 import { RagService } from './rag.service';
+import { PythonRagService } from './python-rag.service';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 
 @Module({
@@ -15,7 +16,7 @@ import { OpenRouterService } from '../openrouter/openrouter.service';
     ]),
     HttpModule,
   ],
-  providers: [RagService, OpenRouterService],
-  exports: [RagService],
+  providers: [RagService, PythonRagService, OpenRouterService],
+  exports: [RagService, PythonRagService],
 })
 export class RagModule {}

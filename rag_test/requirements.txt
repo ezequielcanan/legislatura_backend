@@ -29,3 +29,7 @@ rich==14.0.0
 
 # Optional: Redis for semantic cache
 redis==5.3.0
+
+# FastAPI bridge (for NestJS integration)
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.34,<0.35

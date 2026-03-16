@@ -34,6 +34,90 @@ CATEGORIAS_CONOCIDAS = [
 class QueryAnalyzer:
     """Analyzes user queries to extract filters and generate variants."""
 
+    def rewrite_with_context(
+        self, query: str, conversation_history: Optional[List[Dict]] = None
+    ) -> str:
+        """
+        Rewrite a follow-up query by resolving references (e.g., "este expediente",
+        "ese proyecto", "contame mas") using conversation history.
+        Returns the rewritten query, or the original if no rewriting is needed.
+        """
+        if not conversation_history:
+            return query
+
+        # If query already has an explicit expediente number, no rewriting needed
+        exp_pattern = r"\b(\d{1,5}\s*[-–]\s*[A-Za-z]{1,4}\s*[-–]\s*\d{4})\b"
+        if re.search(exp_pattern, query):
+            return query
+
+        # Check for vague/follow-up patterns that need context
+        followup_patterns = [
+            r"\b(este|ese|aquel|dicho|el mismo|la misma)\b",
+            r"\b(contame|decime|explicame|dame|hablame)\s+(mas|más)",
+            r"\b(mas|más)\s+(info|información|detalle|detalles)",
+            r"\b(sobre (eso|esto|el|lo anterior|lo mismo))\b",
+            r"\b(ampliar?|profundizar?|detallar?)\b",
+            r"\b(el expediente|el proyecto|la ley|la resolución)\b",
+        ]
+        is_followup = any(
+            re.search(p, query, re.IGNORECASE) for p in followup_patterns
+        )
+        if not is_followup:
+            return query
+
+        # Build compact history for the LLM
+        recent = conversation_history[-6:]
+        history_text = "\n".join(
+            f"{m.get('role', 'user').upper()}: {m.get('text', m.get('content', ''))[:300]}"
+            for m in recent
+        )
+
+        url = f"{Config.OPENROUTER_API_URL}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": Config.OPENROUTER_RERANK_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Eres un reescritor de consultas. El usuario está en un chat sobre "
+                        "legislación de Buenos Aires. Su última pregunta hace referencia a algo "
+                        "mencionado antes en la conversación.\n"
+                        "Tu tarea: reescribir la consulta del usuario para que sea AUTÓNOMA "
+                        "(se entienda sin contexto previo). Incluye números de expediente, "
+                        "nombres o temas específicos mencionados en el historial.\n"
+                        "Responde SOLO con la consulta reescrita, sin explicaciones."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Historial reciente:\n{history_text}\n\n"
+                        f"Consulta actual del usuario: {query}\n\n"
+                        "Reescribe la consulta para que sea autónoma:"
+                    ),
+                },
+            ],
+            "temperature": 0.0,
+            "max_tokens": 200,
+        }
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=10)
+            resp.raise_for_status()
+            rewritten = resp.json()["choices"][0]["message"]["content"].strip()
+            # Sanity: non-empty and not absurdly long
+            if rewritten and len(rewritten) < 500:
+                print(f"[QueryAnalyzer] Rewrite: '{query}' → '{rewritten}'")
+                return rewritten
+        except Exception as e:
+            print(f"[QueryAnalyzer] Rewrite failed, using original: {e}")
+
+        return query
+
     def analyze(self, query: str) -> Dict:
         """
         Returns:

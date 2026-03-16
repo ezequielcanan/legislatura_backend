@@ -13,6 +13,8 @@
     "dev": "npm run start:dev",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "rag:start": "cd rag_test && python api.py",
+    "rag:install": "cd rag_test && pip install -r requirements.txt",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

@@ -138,6 +138,8 @@ export class ChatController {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('X-Accel-Buffering', 'no');
+      // Disable Nagle's algorithm for real-time streaming
+      res.socket?.setNoDelay?.(true);
       res.flushHeaders();
 
       const result = await this.chatService.sendMessage(
@@ -159,14 +161,39 @@ export class ChatController {
       }
 
       let fullResponse = '';
+      let ragSources: any[] = [];
+      // Regex to strip inline [REF-N] patterns the LLM might still produce
+      const refPattern = /\s*\[REF-\d+\]\s*/g;
 
       stream.subscribe({
         next: (chunk: string) => {
-          fullResponse += chunk;
+          // Check for embedded RAG sources marker from Python pipeline
+          const sourcesMatch = chunk.match(/<!--RAG_SOURCES:(.*?)-->/s);
+          if (sourcesMatch) {
+            try {
+              ragSources = JSON.parse(sourcesMatch[1]);
+            } catch { /* ignore parse errors */ }
+            // Remove the marker from the chunk before forwarding
+            const cleanChunk = chunk.replace(/\n*<!--RAG_SOURCES:.*?-->/s, '').replace(refPattern, ' ').trim();
+            if (cleanChunk) {
+              fullResponse += cleanChunk;
+              try {
+                res.write(`data: ${JSON.stringify({ chunk: cleanChunk, conversationId, timestamp: new Date().toISOString() })}\n\n`);
+                if (typeof (res as any).flush === 'function') (res as any).flush();
+              } catch (err) {
+                console.error('Error writing chunk:', err);
+              }
+            }
+            return;
+          }
+
+          // Strip any inline [REF-N] patterns
+          const cleanedChunk = chunk.replace(refPattern, ' ');
+          fullResponse += cleanedChunk;
           
           try {
             const data = {
-              chunk,
+              chunk: cleanedChunk,
               conversationId,
               timestamp: new Date().toISOString(),
             };
@@ -198,6 +225,11 @@ export class ChatController {
               (result as any).userMessageId,
               fullResponse,
             );
+
+            // Send sources event if available (from Python RAG pipeline)
+            if (ragSources.length > 0) {
+              res.write(`data: ${JSON.stringify({ sources: ragSources, conversationId })}\n\n`);
+            }
             
             res.write('data: [DONE]\n\n');
           } catch (err) {

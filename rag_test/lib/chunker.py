@@ -157,10 +157,7 @@ class SemanticChunker:
             parts.append(f"Fecha: {metadata['fechaIngreso']}")
 
         if metadata.get("aiSummary"):
-            summary = metadata["aiSummary"]
-            if len(summary) > 200:
-                summary = summary[:200] + "…"
-            parts.append(f"Resumen: {summary}")
+            parts.append(f"Resumen: {metadata['aiSummary']}")
 
         parts.append(f"[Sección {idx + 1} de {total}]")
         parts.append("---")

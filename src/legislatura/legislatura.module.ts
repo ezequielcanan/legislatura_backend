@@ -15,6 +15,7 @@ import { LegislaturaWorker } from './legislatura.worker';
 import { LegislaturaScheduler } from './legislatura.scheduler';
 import { OpenRouterService } from '../openrouter/openrouter.service';
 import { QueueModule } from '../queue/queue.module';
+import { RagModule } from '../rag/rag.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { QueueModule } from '../queue/queue.module';
       maxRedirects: 3,
     }),
     ScheduleModule.forRoot(),
+    RagModule,
   ],
   controllers: [LegislaturaController],
   providers: [
