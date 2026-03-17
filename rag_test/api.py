@@ -439,6 +439,7 @@ async def rag_index(req: IndexExpedienteRequest):
     try:
         embeddings = await asyncio.to_thread(embed_texts, texts)
     except Exception as e:
+        print(f"[API] Embedding generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
 
     # 4. Upsert to Qdrant
@@ -463,6 +464,7 @@ async def rag_index(req: IndexExpedienteRequest):
         store = retriever.s3
         await asyncio.to_thread(store.upsert_vectors, vectors)
     except Exception as e:
+        print(f"[API] Qdrant upsert failed: {e}")
         raise HTTPException(status_code=500, detail=f"Qdrant upsert failed: {str(e)}")
 
     # 5. Update in-memory BM25 index (add new docs and rebuild)

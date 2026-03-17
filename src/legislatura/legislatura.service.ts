@@ -585,30 +585,60 @@ export class LegislaturaService {
     expediente: ExpedienteDocument,
     text: string,
   ): Promise<{ summary: string; tags: string[]; category: string }> {
-    const prompt = `Analyze the following legislative project (expediente) from the Buenos Aires City Legislature and provide a structured JSON response.
+    const esTipoResolucion = (expediente.tipo || '').toUpperCase().includes('RESOLUCION');
+    const restriccionResolucion = esTipoResolucion
+      ? '\n- IMPORTANTE: Al tratarse de un proyecto de resolución, NO utilices expresiones como "el proyecto obliga al Poder Ejecutivo", "ordena al Poder Ejecutivo" ni formulaciones similares que impliquen imposición sobre el Ejecutivo. Usá en su lugar expresiones como "solicita", "insta", "recomienda" u otras apropiadas para resoluciones legislativas.'
+      : '';
 
-Project Number: ${expediente.numero}
-Type: ${expediente.tipo}
-Official Summary: ${expediente.sumario}
+    const prompt = `Sos un abogado parlamentario senior especializado en técnica legislativa de la Ciudad Autónoma de Buenos Aires, con amplia experiencia en análisis de proyectos legislativos.
 
-Full text (truncated):
+Tu tarea es analizar el siguiente proyecto legislativo y devolver una respuesta JSON estructurada con tres campos: summary, tags y category.
+
+───────────────────────────────────────
+DATOS DEL PROYECTO
+───────────────────────────────────────
+Número de expediente: ${expediente.numero}
+Tipo de proyecto: ${expediente.tipo}
+Sumario oficial: ${expediente.sumario}
+
+Texto completo (puede estar truncado):
 ${text.substring(0, 4000)}
+───────────────────────────────────────
 
-Respond ONLY with valid JSON in this exact format:
+INSTRUCCIONES PARA EL CAMPO "summary":
+
+Redactá un resumen integral, claro y técnico en español que NO supere las 10 líneas y que cubra obligatoriamente los siguientes puntos en este orden:
+
+1. **Objeto del proyecto**: Qué busca lograr o regular.
+2. **Modificaciones que introduce**: Si modifica normativa vigente, indicá cuáles y en qué sentido. Si no modifica nada, omití este punto.
+3. **Nuevas responsabilidades u obligaciones**: Si crea o introduce nuevas obligaciones, responsabilidades, derechos o cargas para algún sujeto (organismos públicos, ciudadanos, empresas, etc.), detallá cuáles son y a quiénes alcanzan. Si no las hay, omití este punto.
+4. **Fundamentos principales**: Resumí las razones o motivaciones centrales que justifican la presentación del proyecto.${restriccionResolucion}
+
+Reglas de redacción:
+- Usá un registro formal, preciso y accesible.
+- No repitas el número de expediente ni el tipo de proyecto dentro del resumen.
+- No uses frases genéricas de relleno.
+- Priorizá la información sustantiva por sobre la procedimental.
+
+INSTRUCCIONES PARA EL CAMPO "tags":
+- Incluí entre 3 y 8 palabras clave específicas y relevantes en español que permitan clasificar temáticamente el proyecto (por ejemplo: "transporte público", "código urbanístico", "licencia parental").
+
+INSTRUCCIONES PARA EL CAMPO "category":
+- Elegí UNA sola categoría de esta lista: seguridad, salud, educacion, transporte, vivienda, economia, cultura, ambiente, tecnologia, trabajo, justicia, servicios_publicos, presupuesto, gobierno, derechos_humanos, otro.
+
+Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adicionales, en este formato exacto:
 {
-  "summary": "A clear, concise summary in Spanish (3-5 sentences) explaining what this project does in simple terms, who it affects, and its key provisions",
-  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
-  "category": "one of: seguridad, salud, educacion, transporte, vivienda, economia, cultura, ambiente, tecnologia, trabajo, justicia, servicios_publicos, presupuesto, gobierno, derechos_humanos, otro"
-}
-
-Tags should be specific and relevant keywords in Spanish. Choose the single most fitting category.`;
+  "summary": "...",
+  "tags": ["tag1", "tag2", "..."],
+  "category": "..."
+}`;
 
     try {
       const response = await this.openRouterService.createChatCompletion(
         [
           {
             role: 'system',
-            content: 'You are an expert legislative analyst. You respond ONLY with valid JSON, no markdown, no explanation.',
+            content: 'Sos un abogado parlamentario senior especializado en técnica legislativa de la Ciudad Autónoma de Buenos Aires. Respondés ÚNICAMENTE con JSON válido, sin markdown ni explicaciones.',
           },
           { role: 'user', content: prompt },
         ],
