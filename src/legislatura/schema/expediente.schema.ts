@@ -139,7 +139,7 @@ export class Expediente {
 
 export const ExpedienteSchema = SchemaFactory.createForClass(Expediente);
 ExpedienteSchema.index({ expedienteId: 1 }, { unique: true });
-ExpedienteSchema.index({ numero: 1 });
+ExpedienteSchema.index({ numero: 1 }, {unique: true});
 ExpedienteSchema.index({ status: 1 });
 ExpedienteSchema.index({ fechaIngresoDate: -1 });
 ExpedienteSchema.index({ aiTags: 1 });

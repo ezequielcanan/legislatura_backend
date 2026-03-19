@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { HttpModule } from '@nestjs/axios';
-import { ScheduleModule } from '@nestjs/schedule';
 import { Bloque, BloqueSchema } from './schema/bloque.schema';
 import { Legislador, LegisladorSchema } from './schema/legislador.schema';
 import { Expediente, ExpedienteSchema } from './schema/expediente.schema';
@@ -31,7 +30,6 @@ import { RagModule } from '../rag/rag.module';
       timeout: 30000,
       maxRedirects: 3,
     }),
-    ScheduleModule.forRoot(),
     RagModule,
   ],
   controllers: [LegislaturaController],
