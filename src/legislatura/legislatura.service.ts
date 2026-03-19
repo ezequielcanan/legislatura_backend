@@ -166,6 +166,7 @@ export class LegislaturaService {
           cargoRecinto: d.cargo_recinto || '',
           idCargoRecinto: d.id_cargo_recinto || 0,
           fechaNacimiento: d.fecha_nacimiento || '',
+          activo: true,
         },
         { upsert: true, new: true },
       );
@@ -180,6 +181,143 @@ export class LegislaturaService {
     const filter: any = {};
     if (bloqueId) filter.bloqueId = bloqueId;
     return this.legisladorModel.find(filter).sort({ apellido: 1 }).lean().exec();
+  }
+
+  async getLegisladoresActivos(): Promise<LegisladorDocument[]> {
+    return this.legisladorModel.find({ activo: true }).sort({ apellido: 1 }).lean().exec();
+  }
+
+  async getLegisladoresInactivos(): Promise<LegisladorDocument[]> {
+    return this.legisladorModel.find({ activo: { $ne: true } }).sort({ apellido: 1 }).lean().exec();
+  }
+
+  /**
+   * Get distinct authors that have expedientes matching the given filters.
+   * Returns a list of { legisladorId, nombre, apellido } for authors.
+   */
+  async getDistinctAutores(filters: SearchExpedientesDto): Promise<Array<{ legisladorId: number; nombre: string; apellido: string }>> {
+    const baseQuery = await this.buildExpedienteQuery(filters, { skipAutorCoautor: true });
+    const result = await this.expedienteModel.aggregate([
+      { $match: baseQuery },
+      { $match: { 'autor.legisladorId': { $exists: true, $ne: null } } },
+      { $group: { _id: '$autor.legisladorId', nombre: { $first: '$autor.nombre' }, apellido: { $first: '$autor.apellido' } } },
+      { $sort: { apellido: 1, nombre: 1 } },
+    ]).exec();
+    return result.map(r => ({ legisladorId: r._id, nombre: r.nombre, apellido: r.apellido }));
+  }
+
+  /**
+   * Get distinct coauthors that have expedientes matching the given filters.
+   */
+  async getDistinctCoautores(filters: SearchExpedientesDto): Promise<Array<{ legisladorId: number; nombre: string; apellido: string }>> {
+    const baseQuery = await this.buildExpedienteQuery(filters, { skipAutorCoautor: true });
+    const result = await this.expedienteModel.aggregate([
+      { $match: baseQuery },
+      { $unwind: '$coautores' },
+      { $match: { 'coautores.legisladorId': { $exists: true, $ne: null } } },
+      { $group: { _id: '$coautores.legisladorId', nombre: { $first: '$coautores.nombre' }, apellido: { $first: '$coautores.apellido' } } },
+      { $sort: { apellido: 1, nombre: 1 } },
+    ]).exec();
+    return result.map(r => ({ legisladorId: r._id, nombre: r.nombre, apellido: r.apellido }));
+  }
+
+  /**
+   * Build a mongo query for expedientes from filters, optionally skipping autor/coautor conditions.
+   */
+  private async buildExpedienteQuery(
+    filters: SearchExpedientesDto,
+    options: { skipAutorCoautor?: boolean } = {},
+  ): Promise<any> {
+    const { query, tipo, estado, comisionUrl, bloqueId, tag, category, dateFrom, dateTo } = filters;
+    const mongoQuery: any = {};
+
+    if (query && query.trim()) {
+      const searchRegex = new RegExp(query.trim(), 'i');
+      mongoQuery.$or = [
+        { numero: searchRegex },
+        { titulo: searchRegex },
+        { sumario: searchRegex },
+        { aiSummary: searchRegex },
+        { aiTags: searchRegex },
+      ];
+    }
+    if (tipo) mongoQuery.tipo = tipo;
+    if (estado) mongoQuery.estado = estado;
+    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (tag) mongoQuery.aiTags = tag;
+    if (category) mongoQuery.aiCategory = category;
+
+    if (!options.skipAutorCoautor && bloqueId) {
+      const legsInBloque = await this.legisladorModel.find({ bloqueId }, { legisladorId: 1 }).lean();
+      const legIds = legsInBloque.map((l) => l.legisladorId);
+      if (legIds.length) {
+        mongoQuery.$and = mongoQuery.$and || [];
+        mongoQuery.$and.push({ $or: [{ 'autor.legisladorId': { $in: legIds } }, { 'coautores.legisladorId': { $in: legIds } }] });
+      }
+    }
+
+    if (dateFrom || dateTo) {
+      mongoQuery.fechaIngresoDate = {};
+      if (dateFrom) mongoQuery.fechaIngresoDate.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setUTCHours(23, 59, 59, 999);
+        mongoQuery.fechaIngresoDate.$lte = end;
+      }
+    }
+
+    return mongoQuery;
+  }
+
+  /**
+   * Ensure legisladors referenced in expedientes exist in the DB.
+   * Inserts only those not already present, marking them as inactive.
+   */
+  async ensureLegisladoresFromExpedientes(): Promise<{ inserted: number }> {
+    // Get all distinct legislador IDs from autor and coautores
+    const [autores, coautores] = await Promise.all([
+      this.expedienteModel.aggregate([
+        { $match: { 'autor.legisladorId': { $exists: true, $ne: null } } },
+        { $group: { _id: '$autor.legisladorId', nombre: { $first: '$autor.nombre' }, apellido: { $first: '$autor.apellido' } } },
+      ]).exec(),
+      this.expedienteModel.aggregate([
+        { $unwind: '$coautores' },
+        { $group: { _id: '$coautores.legisladorId', nombre: { $first: '$coautores.nombre' }, apellido: { $first: '$coautores.apellido' } } },
+      ]).exec(),
+    ]);
+
+    // Merge into a map
+    const allLegisladores = new Map<number, { nombre: string; apellido: string }>();
+    for (const a of autores) {
+      allLegisladores.set(a._id, { nombre: a.nombre, apellido: a.apellido });
+    }
+    for (const c of coautores) {
+      if (!allLegisladores.has(c._id)) {
+        allLegisladores.set(c._id, { nombre: c.nombre, apellido: c.apellido });
+      }
+    }
+
+    // Find which ones are already in the DB
+    const existingIds = new Set(
+      (await this.legisladorModel.find({}, { legisladorId: 1 }).lean().exec()).map(l => l.legisladorId),
+    );
+
+    let inserted = 0;
+    for (const [legId, { nombre, apellido }] of allLegisladores) {
+      if (existingIds.has(legId)) continue;
+      await this.legisladorModel.create({
+        legisladorId: legId,
+        nombre,
+        apellido,
+        activo: false,
+        bloque: '',
+        bloqueId: 0,
+      });
+      inserted++;
+    }
+
+    this.logger.log(`Inserted ${inserted} inactive legisladores from expedientes`);
+    return { inserted };
   }
 
   async getLegisladorById(legisladorId: number): Promise<LegisladorDocument | null> {
@@ -350,6 +488,12 @@ export class LegislaturaService {
       );
 
       this.logger.log(`Sync completed: ${newCount} new expedientes`);
+
+      // Auto-insert legisladores from expedientes that don't exist in DB
+      if (newCount > 0) {
+        await this.ensureLegisladoresFromExpedientes();
+      }
+
       return { newExpedientes: newCount, totalFound: expedientes.length };
     } catch (error) {
       this.logger.error('Error syncing expedientes:', error.message);
@@ -450,6 +594,11 @@ export class LegislaturaService {
       // Enqueue for processing (download PDF, summarize, tag, embed)
       await this.legislaturaProducer.enqueueProcessExpediente(expId);
       newCount++;
+    }
+
+    // Auto-insert legisladores from expedientes that don't exist in DB
+    if (newCount > 0) {
+      await this.ensureLegisladoresFromExpedientes();
     }
 
     return { newExpedientes: newCount, totalFound: expedientes.length };
@@ -780,6 +929,8 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       comisionUrl,
       bloqueId,
       legisladorId,
+      autorId,
+      coautorId,
       tag,
       category,
       dateFrom,
@@ -811,6 +962,14 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
 
     if (legisladorId) {
       authorOrConditions.push({ $or: [{ 'autor.legisladorId': legisladorId }, { 'coautores.legisladorId': legisladorId }] });
+    }
+
+    if (autorId) {
+      authorOrConditions.push({ 'autor.legisladorId': autorId });
+    }
+
+    if (coautorId) {
+      authorOrConditions.push({ 'coautores.legisladorId': coautorId });
     }
 
     if (bloqueId) {
@@ -1481,7 +1640,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       .lean()
       .exec();
 
-    const { query, tipo, comisionUrl, bloqueId, legisladorId, limit = 50, skip = 0 } = filters;
+    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, limit = 50, skip = 0 } = filters;
     const mongoQuery: any = {
       'baeReferences': { $elemMatch: { nroOrden, anoParlamentario } },
     };
@@ -1508,6 +1667,16 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
           { 'coautores.legisladorId': legisladorId },
         ],
       });
+    }
+
+    if (autorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({ 'autor.legisladorId': autorId });
+    }
+
+    if (coautorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({ 'coautores.legisladorId': coautorId });
     }
 
     if (bloqueId) {

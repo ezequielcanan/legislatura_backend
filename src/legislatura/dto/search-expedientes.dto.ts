@@ -29,11 +29,23 @@ export class SearchExpedientesDto {
   @IsInt()
   bloqueId?: number;
 
-  @ApiProperty({ required: false, description: 'Filter by legislador ID' })
+  @ApiProperty({ required: false, description: 'Filter by legislador ID (autor or coautor)' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   legisladorId?: number;
+
+  @ApiProperty({ required: false, description: 'Filter by autor legislador ID' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  autorId?: number;
+
+  @ApiProperty({ required: false, description: 'Filter by coautor legislador ID' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  coautorId?: number;
 
   @ApiProperty({ required: false, description: 'Filter by AI tag' })
   @IsOptional()

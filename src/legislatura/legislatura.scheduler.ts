@@ -176,10 +176,10 @@ export class LegislaturaScheduler {
   }
 
   /**
-   * Check for new BAE every Monday and Thursday at 08:00 AM Buenos Aires time.
+   * Check for new BAE every day at 08:00 AM Buenos Aires time.
    * BAEs are published roughly every 1-2 weeks.
    */
-  @Cron('0 8 * * 1,4', {
+  @Cron('0 8 * * *', {
     name: 'legislaturaBaeSync',
     timeZone: 'America/Argentina/Buenos_Aires',
   })

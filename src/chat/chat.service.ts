@@ -50,7 +50,7 @@ DIRECTRICES:
 7. Cuando menciones proyectos, incluye su tipo, estado y autores si están disponibles
 8. Proporciona TODA la información disponible — NUNCA truncar con "..." o "…"
 9. Si el usuario pregunta sobre la conversación en sí, usa el historial de mensajes previos
-10. NO incluyas referencias inline como [REF-1], [REF-2] en el texto — las fuentes se muestran automáticamente
+10. NO incluyas referencias inline como [REF-1], [REF-2], (REF-1), (REF-2) en el texto — las fuentes se muestran automáticamente
 
 {documents}`;
   }

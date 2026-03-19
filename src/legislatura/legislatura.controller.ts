@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schema/users.schema';
@@ -17,6 +18,8 @@ import { LegislaturaService } from './legislatura.service';
 import { SearchExpedientesDto } from './dto/search-expedientes.dto';
 
 @ApiTags('legislatura')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('legislatura')
 export class LegislaturaController {
   private readonly logger = new Logger(LegislaturaController.name);
@@ -63,6 +66,17 @@ export class LegislaturaController {
     }
   }
 
+  @Get('legisladores/inactivos')
+  @ApiOperation({ summary: 'Get inactive legisladores (from old mandates)' })
+  async getLegisladoresInactivos() {
+    try {
+      const legisladores = await this.legislaturaService.getLegisladoresInactivos();
+      return { success: true, data: legisladores };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get('legisladores/:id')
   @ApiOperation({ summary: 'Get legislador detail (includes comisiones)' })
   async getLegisladorById(@Param('id') id: string) {
@@ -75,6 +89,28 @@ export class LegislaturaController {
   }
 
   // ─── Expedientes ─────────────────────────────────
+
+  @Get('expedientes/autores')
+  @ApiOperation({ summary: 'Get distinct autores matching current filters' })
+  async getDistinctAutores(@Query() filters: SearchExpedientesDto) {
+    try {
+      const autores = await this.legislaturaService.getDistinctAutores(filters);
+      return { success: true, data: autores };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('expedientes/coautores')
+  @ApiOperation({ summary: 'Get distinct coautores matching current filters' })
+  async getDistinctCoautores(@Query() filters: SearchExpedientesDto) {
+    try {
+      const coautores = await this.legislaturaService.getDistinctCoautores(filters);
+      return { success: true, data: coautores };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
 
   @Get('expedientes')
   @ApiOperation({ summary: 'Search and filter expedientes' })
@@ -132,7 +168,7 @@ export class LegislaturaController {
   // ─── Sync & Admin ────────────────────────────────
 
   @Post('sync/bloques')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trigger manual bloques sync' })
@@ -146,21 +182,23 @@ export class LegislaturaController {
   }
 
   @Post('sync/legisladores')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trigger manual legisladores sync' })
   async triggerSyncLegisladores() {
     try {
       const result = await this.legislaturaService.syncLegisladores();
-      return { success: true, ...result };
+      // Also ensure legisladores from expedientes are inserted
+      const ensureResult = await this.legislaturaService.ensureLegisladoresFromExpedientes();
+      return { success: true, ...result, insertedInactive: ensureResult.inserted };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Post('sync/expedientes')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trigger manual expedientes sync for today' })
@@ -174,7 +212,7 @@ export class LegislaturaController {
   }
 
   @Post('sync/expedientes/range')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Sync expedientes for a date range (dd/mm/yyyy)' })
@@ -194,7 +232,7 @@ export class LegislaturaController {
   }
 
   @Post('sync/full')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trigger full sync (bloques + legisladores + today expedientes)' })
@@ -243,7 +281,7 @@ export class LegislaturaController {
   // ─── Sync Giros (admin) ──────────────────────────
 
   @Post('sync/giros')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Trigger manual giros+ubicacion sync for recent expedientes' })
@@ -299,7 +337,7 @@ export class LegislaturaController {
   }
 
   @Post('sync/bae')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Sync a specific BAE by nroOrden and anoParlamentario' })
@@ -326,7 +364,7 @@ export class LegislaturaController {
   }
 
   @Post('sync/bae/latest')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check and sync the latest BAE for the current year' })
@@ -340,7 +378,7 @@ export class LegislaturaController {
   }
 
   @Post('sync/bae/year')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Sync all BAEs for a specific year (for Postman/admin use)' })

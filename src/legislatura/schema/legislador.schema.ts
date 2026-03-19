@@ -74,6 +74,9 @@ export class Legislador {
   @Prop({ type: String })
   oficina: string;
 
+  @Prop({ type: Boolean, default: true })
+  activo: boolean;
+
   @Prop({ type: [String], default: [] })
   comisiones: string[];
 
@@ -85,3 +88,4 @@ export const LegisladorSchema = SchemaFactory.createForClass(Legislador);
 LegisladorSchema.index({ legisladorId: 1 }, { unique: true });
 LegisladorSchema.index({ bloqueId: 1 });
 LegisladorSchema.index({ apellido: 1, nombre: 1 });
+LegisladorSchema.index({ activo: 1 });

@@ -162,8 +162,8 @@ export class ChatController {
 
       let fullResponse = '';
       let ragSources: any[] = [];
-      // Regex to strip inline [REF-N] patterns the LLM might still produce
-      const refPattern = /\s*\[REF-\d+\]\s*/g;
+      // Regex to strip inline [REF-N] and (REF-N) patterns the LLM might still produce
+      const refPattern = /\s*(?:\[REF-\d+\]|\(REF-\d+\))\s*/g;
 
       stream.subscribe({
         next: (chunk: string) => {

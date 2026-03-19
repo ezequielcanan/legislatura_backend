@@ -17,14 +17,14 @@ export class LegislaturaWorker extends BaseWorker implements OnModuleInit, OnMod
       db: Number(configService.get('REDIS_DB', 0)),
     };
     super('legislatura', connection, {
-      concurrency: 4,
-      limiter: { max: 50, duration: 20000 },
+      concurrency: 16,
+      limiter: { max: 256, duration: 20000 },
     });
   }
 
   async onModuleInit() {
     try {
-      this.start(4);
+      this.start(16);
       this.logger.log(`Worker listening on queue: ${this.worker.name}`);
 
       this.worker.on('completed', (job: Job) => {

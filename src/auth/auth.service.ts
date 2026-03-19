@@ -41,7 +41,7 @@ export class AuthService {
     const user = await this.usersService.validateUser(loginUserDto.email, loginUserDto.password);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Correo electrónico o contraseña incorrectos');
     }
 
     const tokens = await this.generateTokens(user);

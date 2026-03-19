@@ -19,7 +19,7 @@ export class UsersService {
   async create(createUserDto: CreateUserDto): Promise<UserDocument | User> {
     const existingUser = await this.findByEmail(createUserDto.email);
     if (existingUser) {
-      throw new ConflictException('Email already exists');
+      throw new ConflictException('Ya existe una cuenta con ese correo electrónico');
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, this.SALT_ROUNDS);
@@ -114,7 +114,7 @@ export class UsersService {
 
     // Check if account is locked
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new ForbiddenException('Account is temporarily locked due to too many failed attempts');
+      throw new ForbiddenException('La cuenta está temporalmente bloqueada por demasiados intentos fallidos');
     }
 
     // Check if user has password (Google users might not have one)
