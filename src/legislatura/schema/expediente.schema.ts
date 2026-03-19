@@ -14,7 +14,7 @@ export enum ExpedienteStatus {
 
 @Schema({ timestamps: true })
 export class Expediente {
-  @Prop({ type: Number, required: true, unique: true, index: true })
+  @Prop({ type: Number, required: true })
   expedienteId: number;
 
   @Prop({ type: String, required: true })

@@ -5,7 +5,7 @@ export type LegisladorDocument = HydratedDocument<Legislador>;
 
 @Schema({ timestamps: true })
 export class Legislador {
-  @Prop({ type: Number, required: true, unique: true, index: true })
+  @Prop({ type: Number, required: true })
   legisladorId: number;
 
   @Prop({ type: String, required: true })
@@ -26,7 +26,7 @@ export class Legislador {
   @Prop({ type: String })
   urlBloque: string;
 
-  @Prop({ type: Number, index: true })
+  @Prop({ type: Number })
   bloqueId: number;
 
   @Prop({ type: String })

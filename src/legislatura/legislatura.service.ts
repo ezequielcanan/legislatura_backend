@@ -305,10 +305,14 @@ export class LegislaturaService {
     let inserted = 0;
     for (const [legId, { nombre, apellido }] of allLegisladores) {
       if (existingIds.has(legId)) continue;
+      if (!nombre && !apellido) {
+        this.logger.warn(`Skipping legislador ${legId}: missing nombre and apellido`);
+        continue;
+      }
       await this.legisladorModel.create({
         legisladorId: legId,
-        nombre,
-        apellido,
+        nombre: nombre || 'Desconocido',
+        apellido: apellido || 'Desconocido',
         activo: false,
         bloque: '',
         bloqueId: 0,

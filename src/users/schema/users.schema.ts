@@ -29,7 +29,7 @@ export class User {
   })
   role: UserRole;
 
-  @Prop({ type: String, unique: true, sparse: true })
+  @Prop({ type: String })
   googleId?: string;
 
   @Prop({ type: String, default: null })

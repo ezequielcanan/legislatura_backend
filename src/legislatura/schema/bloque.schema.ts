@@ -5,7 +5,7 @@ export type BloqueDocument = HydratedDocument<Bloque>;
 
 @Schema({ timestamps: true })
 export class Bloque {
-  @Prop({ type: Number, required: true, unique: true, index: true })
+  @Prop({ type: Number, required: true })
   bloqueId: number;
 
   @Prop({ type: String, required: true })

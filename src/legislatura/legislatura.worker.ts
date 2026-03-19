@@ -18,6 +18,8 @@ export class LegislaturaWorker extends BaseWorker implements OnModuleInit, OnMod
     };
     super('legislatura', connection, {
       concurrency: 16,
+      lockDuration: 300000, // 5 minutes — jobs can take up to ~3 min for large documents
+      lockRenewTime: 60000, // renew every 1 minute
       limiter: { max: 256, duration: 20000 },
     });
   }
