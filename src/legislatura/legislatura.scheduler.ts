@@ -40,7 +40,7 @@ export class LegislaturaScheduler {
     try {
       this.logger.log('Starting scheduled sync of today expedientes...');
 
-      const syncStatus = await this.syncModel.findOne({ syncKey: 'today' }).lean().exec();
+      const syncStatus = await this.syncModel.findOne({ syncKey: 'main' }).lean().exec();
       if (syncStatus?.status === 'running') {
         this.logger.warn('Sync already running, skipping...');
         return;
