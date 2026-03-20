@@ -63,8 +63,8 @@ def fetch_mongo_embeddings(db, batch_size: int = 500):
 
     query = {
         "sourceType": "document",
-        "vector": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
         "deleted": {"$ne": True},
+        "vector.0": {"$exists": True},   # non-empty array (avoids $not/$size pymongo quirk)
     }
 
     projection = {
