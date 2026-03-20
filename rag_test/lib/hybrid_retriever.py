@@ -91,10 +91,26 @@ class HybridRetriever:
         analysis = self.analyzer.analyze(query)
         vector_filter = self._build_vector_filter(analysis.get("filters", {}))
 
-        # Stage 1: Explicit expediente number extraction
-        explicit = self._extract_explicit_matches(query)
-        if explicit:
+        # Stage 1: Explicit expediente number extraction (uses Qdrant filter)
+        explicit_numeros = self._extract_expediente_numbers(query)
+        explicit = []
+        if explicit_numeros:
+            explicit = self._fetch_explicit_from_qdrant(explicit_numeros)
             results.extend(explicit)
+
+        # Dynamic top_k: scale up when many explicit expedientes are requested
+        num_explicit = len(explicit_numeros)
+        if num_explicit > 3:
+            # At least 3 chunks per expediente, minimum original top_k
+            top_k = max(top_k, num_explicit * 3)
+
+        # If we have a large number of explicit matches (e.g., user listed 5+
+        # expediente numbers), the explicit results from Qdrant are already
+        # comprehensive. Skip the expensive hybrid search to avoid dilution.
+        if num_explicit >= 5 and len(explicit) >= num_explicit * 2:
+            print(f"[Retrieval] Short-circuit: {num_explicit} explicit expedientes, "
+                  f"{len(explicit)} chunks fetched directly from Qdrant")
+            return explicit[:top_k]
 
         # Pre-compute query embedding once (reuse if provided by caller)
         if query_embedding is None:
@@ -182,8 +198,37 @@ class HybridRetriever:
 
     # ── Stage 0: Explicit match ─────────────────────────────────
 
-    def _extract_explicit_matches(self, query: str) -> List[Dict]:
-        """Find expediente numbers mentioned in the query."""
+    def _extract_expediente_numbers(self, query: str) -> List[str]:
+        """Extract all expediente numbers from the query text."""
+        pattern = r"\b(\d{1,5}\s*[-–]\s*[A-Za-z]{1,4}\s*[-–]\s*\d{4})\b"
+        matches = re.findall(pattern, query)
+        normalized = []
+        seen = set()
+        for match in matches:
+            n = re.sub(r"\s+", "", match).upper().replace("–", "-")
+            if n not in seen:
+                seen.add(n)
+                normalized.append(n)
+        return normalized
+
+    def _fetch_explicit_from_qdrant(self, numeros: List[str]) -> List[Dict]:
+        """Fetch all chunks for explicit expediente numbers from Qdrant."""
+        results = []
+        for numero in numeros:
+            try:
+                chunks = self.s3.scroll_by_numero(numero)
+                for chunk in chunks:
+                    chunk["source"] = "explicit"
+                    results.append(chunk)
+            except Exception as e:
+                print(f"[Retrieval] Qdrant scroll for {numero} failed: {e}")
+        if results:
+            print(f"[Retrieval] Fetched {len(results)} chunks for "
+                  f"{len(numeros)} explicit expedientes from Qdrant")
+        return results
+
+    def _extract_explicit_matches_legacy(self, query: str) -> List[Dict]:
+        """Legacy: Find expediente numbers in the BM25 corpus (fallback)."""
         pattern = r"\b(\d{1,5}\s*[-–]\s*[A-Za-z]{1,4}\s*[-–]\s*\d{4})\b"
         matches = re.findall(pattern, query)
         if not matches:
@@ -493,46 +538,65 @@ class HybridRetriever:
         self,
         candidates: List[Dict],
         top_n: int = 30,
-        max_per_expediente: int = 2,
+        max_per_expediente: int = 3,
     ) -> List[Dict]:
         """
         Fast diversity selection: limits chunks per expediente.
-        Per expediente keeps at most 1 SUMMARY + 1 CONTENT chunk.
-        Documents are already sorted by RRF score, so this preserves
-        relevance ordering while ensuring diversity across expedientes.
+        Two-pass approach:
+        - Pass 1: ensure every unique expediente gets at least 1 SUMMARY + 1 CONTENT
+        - Pass 2: fill remaining slots by score
+
+        This guarantees no expediente is silently dropped.
         """
         if len(candidates) <= top_n:
             return candidates
 
+        # Pass 1: guarantee at least one chunk per unique expediente
         selected = []
-        # Track which chunk types we've taken per expediente
+        seen_keys = set()
         exp_types: Dict[str, set] = {}  # numero -> set of chunkTypes taken
-        exp_count: Dict[str, int] = {}  # numero -> total chunks taken
+        exp_count: Dict[str, int] = {}
 
+        # First, pick the best SUMMARY per expediente
+        for doc in candidates:
+            numero = doc.get("metadata", {}).get("numero", "")
+            chunk_type = doc.get("metadata", {}).get("chunkType", "CONTENT")
+            key = doc.get("key", "")
+            if not numero or key in seen_keys:
+                continue
+            if chunk_type == "SUMMARY" and "SUMMARY" not in exp_types.get(numero, set()):
+                selected.append(doc)
+                seen_keys.add(key)
+                exp_count[numero] = exp_count.get(numero, 0) + 1
+                exp_types.setdefault(numero, set()).add("SUMMARY")
+
+        # Then pick best CONTENT per expediente
+        for doc in candidates:
+            numero = doc.get("metadata", {}).get("numero", "")
+            chunk_type = doc.get("metadata", {}).get("chunkType", "CONTENT")
+            key = doc.get("key", "")
+            if not numero or key in seen_keys:
+                continue
+            if chunk_type != "SUMMARY" and "CONTENT" not in exp_types.get(numero, set()):
+                selected.append(doc)
+                seen_keys.add(key)
+                exp_count[numero] = exp_count.get(numero, 0) + 1
+                exp_types.setdefault(numero, set()).add("CONTENT")
+
+        # Pass 2: fill remaining slots by score, respecting max_per_expediente
         for doc in candidates:
             if len(selected) >= top_n:
                 break
+            key = doc.get("key", "")
+            if key in seen_keys:
+                continue
             numero = doc.get("metadata", {}).get("numero", "")
-            chunk_type = doc.get("metadata", {}).get("chunkType", "CONTENT")
-
-            if not numero:
-                selected.append(doc)
+            if numero and exp_count.get(numero, 0) >= max_per_expediente:
                 continue
-
-            count = exp_count.get(numero, 0)
-            types_taken = exp_types.get(numero, set())
-
-            if count >= max_per_expediente:
-                continue
-            # Prefer diversity of chunk types: skip if we already have this type
-            if count > 0 and chunk_type in types_taken:
-                continue
-
             selected.append(doc)
-            exp_count[numero] = count + 1
-            if numero not in exp_types:
-                exp_types[numero] = set()
-            exp_types[numero].add(chunk_type)
+            seen_keys.add(key)
+            if numero:
+                exp_count[numero] = exp_count.get(numero, 0) + 1
 
         return selected
 

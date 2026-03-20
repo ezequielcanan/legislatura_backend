@@ -202,6 +202,53 @@ class VectorStore:
             "segments_count": info.segments_count,
         }
 
+    def scroll_by_numero(self, numero: str, limit: int = 20) -> List[Dict]:
+        """
+        Fetch ALL chunks for a given expediente numero using a keyword filter.
+        Returns list of dicts: [{'key', 'score', 'metadata', 'text'}, ...]
+        """
+        qdrant_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="numero",
+                    match=MatchValue(value=numero),
+                )
+            ]
+        )
+
+        response = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=qdrant_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        results: List[Dict] = []
+        points = response[0] if isinstance(response, tuple) else response
+        for point in points:
+            payload = dict(point.payload) if point.payload else {}
+            text = payload.pop("text", "")
+            results.append({
+                "key": str(point.id),
+                "score": 1.0,  # exact match
+                "text": text,
+                "metadata": payload,
+            })
+
+        return results
+
+    def scroll_by_numeros(self, numeros: List[str], chunks_per_exp: int = 10) -> List[Dict]:
+        """
+        Fetch chunks for multiple expediente numbers in parallel-ish fashion.
+        Returns all chunks grouped, each with score=1.0.
+        """
+        all_results: List[Dict] = []
+        for numero in numeros:
+            results = self.scroll_by_numero(numero, limit=chunks_per_exp)
+            all_results.extend(results)
+        return all_results
+
     def list_collections(self) -> List[str]:
         """List all collections in the Qdrant instance."""
         return [c.name for c in self.client.get_collections().collections]

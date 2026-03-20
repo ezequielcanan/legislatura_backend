@@ -45,7 +45,7 @@ class QueryAnalyzer:
         if not conversation_history:
             return query
 
-        # If query already has an explicit expediente number, no rewriting needed
+        # If query already has explicit expediente numbers, no rewriting needed
         exp_pattern = r"\b(\d{1,5}\s*[-–]\s*[A-Za-z]{1,4}\s*[-–]\s*\d{4})\b"
         if re.search(exp_pattern, query):
             return query
@@ -58,6 +58,9 @@ class QueryAnalyzer:
             r"\b(sobre (eso|esto|el|lo anterior|lo mismo))\b",
             r"\b(ampliar?|profundizar?|detallar?)\b",
             r"\b(el expediente|el proyecto|la ley|la resolución)\b",
+            r"\b(cada uno|uno por uno|todos|esos|estas|estos|esas)\b",
+            r"\b(explica|resume|resumi|detalla|enumera)\b",
+            r"\b(anterior|previo|mencionad[oa]s?|citad[oa]s?|listados?)\b",
         ]
         is_followup = any(
             re.search(p, query, re.IGNORECASE) for p in followup_patterns
@@ -65,10 +68,30 @@ class QueryAnalyzer:
         if not is_followup:
             return query
 
-        # Build compact history for the LLM
-        recent = conversation_history[-6:]
+        # Try to extract expediente numbers from conversation history directly
+        # This is cheaper and more reliable than LLM rewriting for multi-exp queries
+        history_exp_numbers = []
+        for msg in reversed(conversation_history):
+            text = msg.get("text", msg.get("content", ""))
+            nums = re.findall(exp_pattern, text)
+            for n in nums:
+                normalized = re.sub(r"\s+", "", n).upper().replace("–", "-")
+                if normalized not in history_exp_numbers:
+                    history_exp_numbers.append(normalized)
+
+        # If we found expediente numbers in history and the user is asking
+        # about "each one" / "those" etc., inject them directly
+        if len(history_exp_numbers) >= 2:
+            nums_str = ", ".join(history_exp_numbers)
+            rewritten = f"{query} — Expedientes referidos: {nums_str}"
+            print(f"[QueryAnalyzer] Direct rewrite with {len(history_exp_numbers)} "
+                  f"expedientes from history: '{query}' → '{rewritten}'")
+            return rewritten
+
+        # Build compact history for the LLM (use more text for better context)
+        recent = conversation_history[-8:]
         history_text = "\n".join(
-            f"{m.get('role', 'user').upper()}: {m.get('text', m.get('content', ''))[:300]}"
+            f"{m.get('role', 'user').upper()}: {m.get('text', m.get('content', ''))[:600]}"
             for m in recent
         )
 

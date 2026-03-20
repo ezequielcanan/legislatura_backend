@@ -297,8 +297,9 @@ async def rag_query_stream(req: RAGQueryRequest):
     )
 
     stream_gen = response["stream"]
+    context_budget = generator._compute_context_budget(results)
     sources = generator._deduplicated_sources(
-        generator._pack_context(results, generator.MAX_CONTEXT_TOKENS)
+        generator._pack_context(results, context_budget)
     )
 
     def event_stream():

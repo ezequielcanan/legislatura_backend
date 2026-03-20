@@ -16,7 +16,23 @@ from config import Config
 class RAGGenerator:
     """Generates answers from retrieved context using OpenRouter LLM."""
 
-    MAX_CONTEXT_TOKENS = 16384  # Leave room for response
+    BASE_CONTEXT_TOKENS = 16384
+    # Scale up when many expedientes are involved
+    MAX_CONTEXT_TOKENS_CAP = 65536
+
+    def _compute_context_budget(self, docs: List[Dict]) -> int:
+        """Dynamically scale context budget based on unique expedientes."""
+        unique_exp = set()
+        for doc in docs:
+            numero = doc.get("metadata", {}).get("numero", "")
+            if numero:
+                unique_exp.add(numero)
+        num_exp = len(unique_exp)
+        if num_exp <= 3:
+            return self.BASE_CONTEXT_TOKENS
+        # ~4K tokens per expediente, capped at MAX
+        budget = max(self.BASE_CONTEXT_TOKENS, num_exp * 4096)
+        return min(budget, self.MAX_CONTEXT_TOKENS_CAP)
 
     def generate(
         self,
@@ -29,7 +45,8 @@ class RAGGenerator:
         Generate a grounded answer.
         Returns: {answer, sources, context_used}
         """
-        context = self._pack_context(retrieved_docs, self.MAX_CONTEXT_TOKENS)
+        budget = self._compute_context_budget(retrieved_docs)
+        context = self._pack_context(retrieved_docs, budget)
         messages = self._build_messages(query, context, conversation_history)
 
         if stream:
@@ -45,7 +62,7 @@ class RAGGenerator:
             "model": Config.OPENROUTER_CHAT_MODEL,
             "messages": messages,
             "temperature": 0.1,
-            "max_tokens": 8000,
+            "max_tokens": 16000,
         }
 
         resp = requests.post(url, json=payload, headers=headers, timeout=120)
@@ -69,7 +86,7 @@ class RAGGenerator:
             "model": Config.OPENROUTER_CHAT_MODEL,
             "messages": messages,
             "temperature": 0.1,
-            "max_tokens": 8000,
+            "max_tokens": 16000,
             "stream": True,
         }
 
@@ -128,9 +145,9 @@ class RAGGenerator:
         # System prompt
         messages = [{"role": "system", "content": self._system_prompt()}]
 
-        # Conversation history (last 6 messages)
+        # Conversation history (last 10 messages for better follow-up context)
         if history:
-            for msg in history[-6:]:
+            for msg in history[-10:]:
                 messages.append({
                     "role": msg.get("role", "user"),
                     "content": msg.get("text", msg.get("content", "")),
@@ -139,6 +156,23 @@ class RAGGenerator:
         # Group context by expediente for coherent presentation
         context_text = self._group_context_by_expediente(context)
 
+        # Count unique expedientes in context for explicit instruction
+        unique_exp = set()
+        for doc in context:
+            n = doc.get("metadata", {}).get("numero", "")
+            if n:
+                unique_exp.add(n)
+        exp_count = len(unique_exp)
+
+        completeness_instruction = ""
+        if exp_count > 1:
+            exp_list = ", ".join(sorted(unique_exp))
+            completeness_instruction = (
+                f"\n\nIMPORTANTE: El contexto contiene información de {exp_count} "
+                f"expedientes distintos ({exp_list}). "
+                f"Tu respuesta DEBE cubrir TODOS ellos. No omitas ninguno."
+            )
+
         user_msg = f"""Documentos de contexto:
 {context_text}
 
@@ -146,7 +180,7 @@ Pregunta del usuario: {query}
 
 Proporciona una respuesta completa basada en los documentos de contexto anteriores.
 Incluye TODA la información relevante sin truncar ni resumir con puntos suspensivos.
-Si la pregunta es sobre la conversación en sí, usa el historial de mensajes."""
+Si la pregunta es sobre la conversación en sí, usa el historial de mensajes.{completeness_instruction}"""
 
         messages.append({"role": "user", "content": user_msg})
         return messages
@@ -215,7 +249,7 @@ Si la pregunta es sobre la conversación en sí, usa el historial de mensajes.""
 Reglas estrictas:
 1. Responde usando información de los documentos de contexto proporcionados como fuente principal
 2. NO incluyas referencias inline como [REF-1], [REF-2], etc. en el texto de tu respuesta — las fuentes se proporcionan de forma estructurada por separado y el usuario las verá automáticamente
-3. Si la información no está en el contexto, di: "Los documentos proporcionados no contienen información sobre [tema]"
+3. Si la información sobre un expediente específico no está en el contexto, di: "No se encontró información sobre el Expediente [número]" — luego continúa con los que SÍ tienen información
 4. NUNCA inventes datos, números de expediente, o información no presente en el contexto
 5. Mantén un lenguaje profesional y preciso
 6. Si hay múltiples expedientes relevantes, menciona TODOS Y CADA UNO con su número completo — no te limites a un subconjunto arbitrario
@@ -225,6 +259,14 @@ Reglas estrictas:
 10. Si el contexto contiene chunks de tipo SUMMARY, úsalos para dar una visión general antes de entrar en detalles
 11. Tienes acceso al historial de conversación previo — puedes referirte a mensajes anteriores del usuario o tus propias respuestas previas cuando sea relevante
 12. Si el usuario hace una pregunta sobre la conversación en sí (ej: "¿qué te pregunté antes?"), responde usando el historial de la conversación, NO de los documentos
+
+REGLAS DE COMPLETITUD (CRÍTICO):
+- Cuando el usuario pide información sobre MÚLTIPLES expedientes (ej: "explica cada uno", "detalla todos"), DEBES cubrir TODOS los que tengan información en el contexto
+- NUNCA respondas solo sobre un subconjunto si el contexto tiene más expedientes disponibles
+- Si el contexto contiene 10 expedientes, tu respuesta debe cubrir los 10
+- Usa un formato estructurado (listas numeradas, secciones con encabezados) para organizar la información de cada expediente
+- Para cada expediente incluye como mínimo: número, tipo, objeto/resumen y puntos clave
+- No escatimes en longitud: una respuesta completa sobre 12 expedientes DEBE ser larga
 
 Formato de respuesta:
 - Respuesta clara y estructurada

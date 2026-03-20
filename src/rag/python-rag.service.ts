@@ -101,7 +101,7 @@ export class PythonRagService implements OnModuleInit {
     const payload = {
       query: queryText,
       conversation_history: conversationHistory,
-      top_k: options.topK ?? 15,
+      top_k: options.topK ?? 20,
       enable_hyde: options.enableHyde ?? true,
       enable_bm25: options.enableBm25 ?? true,
       enable_rerank: options.enableRerank ?? true,
@@ -143,7 +143,7 @@ export class PythonRagService implements OnModuleInit {
     const payload = {
       query: queryText,
       conversation_history: conversationHistory,
-      top_k: options.topK ?? 15,
+      top_k: options.topK ?? 20,
       enable_hyde: options.enableHyde ?? true,
       enable_bm25: options.enableBm25 ?? true,
       enable_rerank: options.enableRerank ?? true,

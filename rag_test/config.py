@@ -15,7 +15,7 @@ class Config:
     # OpenRouter
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     OPENROUTER_API_URL = os.getenv("OPENROUTER_API_URL", "https://openrouter.ai/api/v1")
-    OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "x-ai/grok-4.1-fast")
+    OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "google/gemini-2.5-flash")
     OPENROUTER_RERANK_MODEL = os.getenv("OPENROUTER_RERANK_MODEL", "google/gemini-2.0-flash-lite-001")
     OPENROUTER_EMBEDDING_MODEL = os.getenv("OPENROUTER_EMBEDDING_MODEL", "text-embedding-3-small")
 
@@ -33,8 +33,8 @@ class Config:
     CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", "300"))
     CHUNK_OVERLAP_TOKENS = int(os.getenv("CHUNK_OVERLAP_TOKENS", "50"))
     EMBEDDING_DIMS = int(os.getenv("EMBEDDING_DIMS", "1536"))
-    RAG_TOP_K = int(os.getenv("RAG_TOP_K", "15"))
-    RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.55"))
+    RAG_TOP_K = int(os.getenv("RAG_TOP_K", "20"))
+    RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.40"))
     RAG_RRF_K = int(os.getenv("RAG_RRF_K", "60"))
     RAG_RERANK_WEIGHT = float(os.getenv("RAG_RERANK_WEIGHT", "0.7"))
     RAG_FUSION_WEIGHT = float(os.getenv("RAG_FUSION_WEIGHT", "0.3"))
