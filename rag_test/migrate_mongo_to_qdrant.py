@@ -46,7 +46,13 @@ console = Console()
 def connect_mongo():
     from pymongo import MongoClient
     client = MongoClient(Config.MONGODB_URI)
-    db = client[Config.MONGODB_DB]
+    # Use the database from the URI path (e.g. mongodb://host/legislatura)
+    # rather than MONGODB_DB env var which may default to "test"
+    try:
+        db = client.get_default_database()
+    except Exception:
+        db = client[Config.MONGODB_DB]
+    console.print(f"  [dim]Using database: [bold]{db.name}[/bold][/dim]")
     return client, db
 
 

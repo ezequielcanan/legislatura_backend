@@ -621,6 +621,19 @@ class HybridRetriever:
             print("[BM25] No index found. Run 02_embed_and_index.py first.")
 
     @staticmethod
+    def _atomic_pickle_dump(obj, path: Path):
+        """
+        Write a pickle file atomically: write to a temp file first,
+        then rename. This prevents corruption if the process is killed
+        mid-write (e.g. OOM killer).
+        """
+        tmp_path = path.with_suffix(".pkl.tmp")
+        with open(tmp_path, "wb") as f:
+            pickle.dump(obj, f)
+        # os.replace is atomic on POSIX
+        os.replace(tmp_path, path)
+
+    @staticmethod
     def build_bm25_index(chunks: List[Dict]):
         """
         Build and persist a BM25 index from chunk dicts.
@@ -632,10 +645,8 @@ class HybridRetriever:
         tokenized = [HybridRetriever._tokenize_spanish(doc["text"]) for doc in chunks]
         bm25 = BM25Okapi(tokenized)
 
-        with open(BM25_INDEX_PATH, "wb") as f:
-            pickle.dump(bm25, f)
-        with open(BM25_CORPUS_PATH, "wb") as f:
-            pickle.dump(chunks, f)
+        HybridRetriever._atomic_pickle_dump(bm25, BM25_INDEX_PATH)
+        HybridRetriever._atomic_pickle_dump(chunks, BM25_CORPUS_PATH)
 
         print(f"[BM25] Built and saved index with {len(chunks)} documents")
 
@@ -651,11 +662,9 @@ class HybridRetriever:
         tokenized = [self._tokenize_spanish(doc["text"]) for doc in self.corpus]
         self.bm25 = BM25Okapi(tokenized)
 
-        # Persist to disk
+        # Persist to disk (atomic writes to prevent corruption on crash)
         os.makedirs(BM25_INDEX_PATH.parent, exist_ok=True)
-        with open(BM25_INDEX_PATH, "wb") as f:
-            pickle.dump(self.bm25, f)
-        with open(BM25_CORPUS_PATH, "wb") as f:
-            pickle.dump(self.corpus, f)
+        self._atomic_pickle_dump(self.bm25, BM25_INDEX_PATH)
+        self._atomic_pickle_dump(self.corpus, BM25_CORPUS_PATH)
 
         print(f"[BM25] Updated index: now {len(self.corpus)} documents")
