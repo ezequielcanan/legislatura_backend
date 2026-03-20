@@ -59,6 +59,31 @@ export class LegislaturaService {
   private readonly logger = new Logger(LegislaturaService.name);
   private readonly xmlParser: XMLParser;
 
+  // Semaphore to limit concurrent heavyweight operations (PDF download + RAG indexing)
+  // Prevents OOM when multiple jobs run in parallel
+  private ragConcurrency = 0;
+  private readonly maxRagConcurrency = 2;
+  private ragQueue: Array<() => void> = [];
+
+  private async acquireRagSlot(): Promise<void> {
+    if (this.ragConcurrency < this.maxRagConcurrency) {
+      this.ragConcurrency++;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.ragQueue.push(() => {
+        this.ragConcurrency++;
+        resolve();
+      });
+    });
+  }
+
+  private releaseRagSlot(): void {
+    this.ragConcurrency--;
+    const next = this.ragQueue.shift();
+    if (next) next();
+  }
+
   constructor(
     @InjectModel(Bloque.name) private bloqueModel: Model<BloqueDocument>,
     @InjectModel(Legislador.name) private legisladorModel: Model<LegisladorDocument>,
@@ -674,42 +699,48 @@ export class LegislaturaService {
 
       // Step 3: Create embeddings — index into Qdrant via Python RAG (preferred)
       // or fallback to MongoDB embeddings if Python service is unavailable
+      // Use semaphore to prevent OOM from concurrent RAG indexing calls
       expediente.status = ExpedienteStatus.EMBEDDING;
       await expediente.save();
 
       let embeddingCount = 0;
 
-      // Try Python RAG service first (indexes into Qdrant + BM25)
-      if (this.pythonRagService.isAvailable) {
-        try {
-          const indexResult = await this.pythonRagService.indexExpediente({
-            expedienteId: expediente.expedienteId,
-            numero: expediente.numero,
-            tipo: expediente.tipo,
-            titulo: expediente.titulo || expediente.sumario || '',
-            sumario: expediente.sumario || '',
-            aiSummary: expediente.aiSummary || '',
-            aiTags: expediente.aiTags || [],
-            aiCategory: expediente.aiCategory || '',
-            fechaIngreso: expediente.fechaIngreso || '',
-            pdfText: fullText || '',
-            baeSource: expediente.baeSource || false,
-            autor: expediente.autor || null,
-          });
-          embeddingCount = indexResult.indexed;
-          this.logger.log(
-            `Expediente ${expedienteId} indexed via Python RAG: ${embeddingCount} chunks in ${indexResult.elapsed_ms}ms`,
-          );
-        } catch (err) {
-          this.logger.warn(
-            `Python RAG indexing failed for ${expedienteId}, falling back to MongoDB: ${err.message}`,
-          );
-          // Fallback to MongoDB embeddings below
+      await this.acquireRagSlot();
+      try {
+        // Try Python RAG service first (indexes into Qdrant + BM25)
+        if (this.pythonRagService.isAvailable) {
+          try {
+            const indexResult = await this.pythonRagService.indexExpediente({
+              expedienteId: expediente.expedienteId,
+              numero: expediente.numero,
+              tipo: expediente.tipo,
+              titulo: expediente.titulo || expediente.sumario || '',
+              sumario: expediente.sumario || '',
+              aiSummary: expediente.aiSummary || '',
+              aiTags: expediente.aiTags || [],
+              aiCategory: expediente.aiCategory || '',
+              fechaIngreso: expediente.fechaIngreso || '',
+              pdfText: fullText || '',
+              baeSource: expediente.baeSource || false,
+              autor: expediente.autor || null,
+            });
+            embeddingCount = indexResult.indexed;
+            this.logger.log(
+              `Expediente ${expedienteId} indexed via Python RAG: ${embeddingCount} chunks in ${indexResult.elapsed_ms}ms`,
+            );
+          } catch (err) {
+            this.logger.warn(
+              `Python RAG indexing failed for ${expedienteId}, falling back to MongoDB: ${err.message}`,
+            );
+            // Fallback to MongoDB embeddings below
+            embeddingCount = await this.createMongoEmbeddings(expediente, fullText);
+          }
+        } else {
+          // Python RAG not available — use MongoDB embeddings (legacy)
           embeddingCount = await this.createMongoEmbeddings(expediente, fullText);
         }
-      } else {
-        // Python RAG not available — use MongoDB embeddings (legacy)
-        embeddingCount = await this.createMongoEmbeddings(expediente, fullText);
+      } finally {
+        this.releaseRagSlot();
       }
 
       expediente.embeddingCount = embeddingCount;
