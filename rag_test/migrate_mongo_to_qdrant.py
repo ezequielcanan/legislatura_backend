@@ -61,11 +61,11 @@ def fetch_mongo_embeddings(db, batch_size: int = 500):
     """
     collection = db["embeddings"]
 
-    '''query = {
+    query = {
         "sourceType": "document",
         "deleted": {"$ne": True},
         "vector.0": {"$exists": True},   # non-empty array (avoids $not/$size pymongo quirk)
-    }'''
+    }
 
     projection = {
         "_id": 1,
@@ -78,8 +78,8 @@ def fetch_mongo_embeddings(db, batch_size: int = 500):
         "provider": 1,
     }
 
-    total = collection.count_documents({})
-    cursor = collection.find({}, projection).batch_size(batch_size)
+    total = collection.count_documents(query)
+    cursor = collection.find(query, projection).batch_size(batch_size)
 
     return cursor, total
 
