@@ -67,6 +67,18 @@ export class SearchExpedientesDto {
   @IsDateString()
   dateTo?: string;
 
+  @ApiProperty({ required: false, description: 'Filter by BAE nroOrden (used to scope distinct autores/coautores to a specific BAE)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  nroOrden?: number;
+
+  @ApiProperty({ required: false, description: 'Filter by BAE anoParlamentario (used together with nroOrden)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  anoParlamentario?: number;
+
   @ApiProperty({ required: false, default: 50, minimum: 1, maximum: 200 })
   @IsOptional()
   @Type(() => Number)

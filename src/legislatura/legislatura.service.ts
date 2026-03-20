@@ -253,7 +253,7 @@ export class LegislaturaService {
     filters: SearchExpedientesDto,
     options: { skipAutorCoautor?: boolean } = {},
   ): Promise<any> {
-    const { query, tipo, estado, comisionUrl, bloqueId, tag, category, dateFrom, dateTo } = filters;
+    const { query, tipo, estado, comisionUrl, bloqueId, tag, category, dateFrom, dateTo, nroOrden, anoParlamentario } = filters;
     const mongoQuery: any = {};
 
     if (query && query.trim()) {
@@ -272,7 +272,12 @@ export class LegislaturaService {
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
 
-    if (!options.skipAutorCoautor && bloqueId) {
+    // Filter by specific BAE when nroOrden + anoParlamentario are provided
+    if (nroOrden && anoParlamentario) {
+      mongoQuery.baeReferences = { $elemMatch: { nroOrden, anoParlamentario } };
+    }
+
+    if (bloqueId) {
       const legsInBloque = await this.legisladorModel.find({ bloqueId }, { legisladorId: 1 }).lean();
       const legIds = legsInBloque.map((l) => l.legisladorId);
       if (legIds.length) {
