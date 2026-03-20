@@ -604,13 +604,19 @@ class HybridRetriever:
     # ── BM25 index management ───────────────────────────────────
 
     def _load_bm25(self):
-        """Load persisted BM25 index if available."""
+        """Load persisted BM25 index if available. Gracefully handles corruption."""
         if BM25_INDEX_PATH.exists() and BM25_CORPUS_PATH.exists():
-            with open(BM25_INDEX_PATH, "rb") as f:
-                self.bm25 = pickle.load(f)
-            with open(BM25_CORPUS_PATH, "rb") as f:
-                self.corpus = pickle.load(f)
-            print(f"[BM25] Loaded index with {len(self.corpus)} documents")
+            try:
+                with open(BM25_INDEX_PATH, "rb") as f:
+                    self.bm25 = pickle.load(f)
+                with open(BM25_CORPUS_PATH, "rb") as f:
+                    self.corpus = pickle.load(f)
+                print(f"[BM25] Loaded index with {len(self.corpus)} documents")
+            except Exception as e:
+                print(f"[BM25] Failed to load index (corrupted?): {e}")
+                print("[BM25] Continuing without BM25 — dense search still works.")
+                self.bm25 = None
+                self.corpus = []
         else:
             print("[BM25] No index found. Run 02_embed_and_index.py first.")
 
