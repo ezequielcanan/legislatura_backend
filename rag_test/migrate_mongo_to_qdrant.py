@@ -61,11 +61,11 @@ def fetch_mongo_embeddings(db, batch_size: int = 500):
     """
     collection = db["embeddings"]
 
-    query = {
+    '''query = {
         "sourceType": "document",
         "deleted": {"$ne": True},
         "vector.0": {"$exists": True},   # non-empty array (avoids $not/$size pymongo quirk)
-    }
+    }'''
 
     projection = {
         "_id": 1,
