@@ -79,6 +79,11 @@ export class SearchExpedientesDto {
   @IsInt()
   anoParlamentario?: number;
 
+  @ApiProperty({ required: false, description: 'Comma-separated BAE refs for combined endpoint (nroOrden-anoParlamentario, e.g. 5-2025,4-2025)' })
+  @IsOptional()
+  @IsString()
+  baes?: string;
+
   @ApiProperty({ required: false, description: 'Search mode: text (default regex) or exact (match numero exactly)' })
   @IsOptional()
   @IsString()
