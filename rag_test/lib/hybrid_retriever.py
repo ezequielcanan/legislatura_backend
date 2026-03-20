@@ -15,6 +15,7 @@ import re
 import json
 import pickle
 import os
+import threading
 from typing import List, Dict, Tuple, Optional
 from pathlib import Path
 
@@ -61,6 +62,10 @@ class HybridRetriever:
         self.corpus: List[Dict] = []
         self.analyzer = QueryAnalyzer()
         self._load_bm25()
+        # Track new docs added since last full BM25 rebuild
+        self._pending_docs: List[Dict] = []
+        self._rebuild_lock = threading.Lock()
+        self._rebuild_timer: Optional[threading.Timer] = None
 
     # ── Main retrieval entry point ──────────────────────────────
 
@@ -652,19 +657,44 @@ class HybridRetriever:
 
     def add_documents(self, new_docs: List[Dict]):
         """
-        Add new documents to the in-memory corpus and rebuild BM25 index.
-        Each doc: {key, text, metadata}
-        Also persists the updated index to disk.
+        Add new documents to the corpus.  Appends to the in-memory list
+        immediately (so BM25 searches still include prior docs) but
+        defers the expensive full BM25 rebuild + disk persist to a
+        debounced background thread (runs 30 s after the last call).
+        This avoids re-tokenizing 210 K+ documents on every single
+        expediente index, which was causing 5-minute timeouts.
         """
         self.corpus.extend(new_docs)
+        self._pending_docs.extend(new_docs)
+        print(f"[BM25] Queued {len(new_docs)} new docs (pending: {len(self._pending_docs)}, total corpus: {len(self.corpus)})")
 
-        # Rebuild BM25 from full corpus
-        tokenized = [self._tokenize_spanish(doc["text"]) for doc in self.corpus]
-        self.bm25 = BM25Okapi(tokenized)
+        # Debounce: reset the timer every time new docs arrive.
+        # The actual rebuild fires 30 s after the last add_documents call.
+        with self._rebuild_lock:
+            if self._rebuild_timer is not None:
+                self._rebuild_timer.cancel()
+            self._rebuild_timer = threading.Timer(30.0, self._deferred_rebuild)
+            self._rebuild_timer.daemon = True
+            self._rebuild_timer.start()
 
-        # Persist to disk (atomic writes to prevent corruption on crash)
-        os.makedirs(BM25_INDEX_PATH.parent, exist_ok=True)
-        self._atomic_pickle_dump(self.bm25, BM25_INDEX_PATH)
-        self._atomic_pickle_dump(self.corpus, BM25_CORPUS_PATH)
+    def _deferred_rebuild(self):
+        """Rebuild BM25 index from the full corpus in the background."""
+        with self._rebuild_lock:
+            self._rebuild_timer = None
+            pending_count = len(self._pending_docs)
+            self._pending_docs = []
 
-        print(f"[BM25] Updated index: now {len(self.corpus)} documents")
+        if pending_count == 0:
+            return
+
+        print(f"[BM25] Starting deferred rebuild ({len(self.corpus)} total docs, {pending_count} new)...")
+        try:
+            tokenized = [self._tokenize_spanish(doc["text"]) for doc in self.corpus]
+            self.bm25 = BM25Okapi(tokenized)
+
+            os.makedirs(BM25_INDEX_PATH.parent, exist_ok=True)
+            self._atomic_pickle_dump(self.bm25, BM25_INDEX_PATH)
+            self._atomic_pickle_dump(self.corpus, BM25_CORPUS_PATH)
+            print(f"[BM25] Deferred rebuild complete: {len(self.corpus)} documents indexed and persisted")
+        except Exception as e:
+            print(f"[BM25] Deferred rebuild failed: {e}")

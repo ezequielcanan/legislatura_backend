@@ -436,11 +436,13 @@ async def rag_index(req: IndexExpedienteRequest):
 
     # 3. Generate embeddings for all chunks
     texts = [c["text"] for c in chunks]
+    t_embed = time.time()
     try:
         embeddings = await asyncio.to_thread(embed_texts, texts)
     except Exception as e:
         print(f"[API] Embedding generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
+    print(f"[API] index {req.expedienteId}: embedding {len(texts)} chunks took {int((time.time() - t_embed) * 1000)}ms")
 
     # 4. Upsert to Qdrant
     import uuid
@@ -460,18 +462,22 @@ async def rag_index(req: IndexExpedienteRequest):
             "metadata": chunk["metadata"],
         })
 
+    t_qdrant = time.time()
     try:
         store = retriever.s3
         await asyncio.to_thread(store.upsert_vectors, vectors)
     except Exception as e:
         print(f"[API] Qdrant upsert failed: {e}")
         raise HTTPException(status_code=500, detail=f"Qdrant upsert failed: {str(e)}")
+    print(f"[API] index {req.expedienteId}: Qdrant upsert took {int((time.time() - t_qdrant) * 1000)}ms")
 
-    # 5. Update in-memory BM25 index (add new docs and rebuild)
+    # 5. Update in-memory BM25 index (deferred rebuild — fast append)
+    t_bm25 = time.time()
     try:
         await asyncio.to_thread(retriever.add_documents, new_bm25_docs)
     except Exception as e:
         print(f"[API] BM25 update warning: {e}")
+    print(f"[API] index {req.expedienteId}: BM25 update took {int((time.time() - t_bm25) * 1000)}ms")
 
     elapsed_ms = int((time.time() - start) * 1000)
     return {
