@@ -975,6 +975,8 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       category,
       dateFrom,
       dateTo,
+      searchMode,
+      baeSourceOnly,
       limit = 50,
       skip = 0,
     } = filters;
@@ -982,14 +984,18 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     const mongoQuery: any = {};
 
     if (query && query.trim()) {
-      const searchRegex = new RegExp(query.trim(), 'i');
-      mongoQuery.$or = [
-        { numero: searchRegex },
-        { titulo: searchRegex },
-        { sumario: searchRegex },
-        { aiSummary: searchRegex },
-        { aiTags: searchRegex },
-      ];
+      if (searchMode === 'exact') {
+        mongoQuery.numero = new RegExp(`^${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      } else {
+        const searchRegex = new RegExp(query.trim(), 'i');
+        mongoQuery.$or = [
+          { numero: searchRegex },
+          { titulo: searchRegex },
+          { sumario: searchRegex },
+          { aiSummary: searchRegex },
+          { aiTags: searchRegex },
+        ];
+      }
     }
 
     if (tipo) mongoQuery.tipo = tipo;
@@ -997,6 +1003,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
+    if (baeSourceOnly) mongoQuery.baeSource = true;
 
     const authorOrConditions: any[] = [];
 
@@ -1680,24 +1687,29 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       .lean()
       .exec();
 
-    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, limit = 50, skip = 0 } = filters;
+    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
     const mongoQuery: any = {
       'baeReferences': { $elemMatch: { nroOrden, anoParlamentario } },
     };
 
     if (query && query.trim()) {
-      const searchRegex = new RegExp(query.trim(), 'i');
-      mongoQuery.$or = [
-        { numero: searchRegex },
-        { titulo: searchRegex },
-        { sumario: searchRegex },
-        { aiSummary: searchRegex },
-        { aiTags: searchRegex },
-      ];
+      if (searchMode === 'exact') {
+        mongoQuery.numero = new RegExp(`^${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      } else {
+        const searchRegex = new RegExp(query.trim(), 'i');
+        mongoQuery.$or = [
+          { numero: searchRegex },
+          { titulo: searchRegex },
+          { sumario: searchRegex },
+          { aiSummary: searchRegex },
+          { aiTags: searchRegex },
+        ];
+      }
     }
 
     if (tipo) mongoQuery.tipo = tipo;
     if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (baeSourceOnly) mongoQuery.baeSource = true;
 
     if (legisladorId) {
       mongoQuery.$and = mongoQuery.$and || [];
@@ -1745,6 +1757,100 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     ]);
 
     return { bae, expedientes, total };
+  }
+
+  /**
+   * Get expedientes from multiple BAEs combined.
+   */
+  async getCombinedBaesExpedientes(
+    baeRefs: Array<{ nroOrden: number; anoParlamentario: number }>,
+    filters: SearchExpedientesDto = {},
+  ): Promise<{ expedientes: ExpedienteDocument[]; total: number }> {
+    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
+
+    const baeOrConditions = baeRefs.map((ref) => ({
+      'baeReferences': { $elemMatch: { nroOrden: ref.nroOrden, anoParlamentario: ref.anoParlamentario } },
+    }));
+
+    const mongoQuery: any = {};
+    if (baeOrConditions.length === 1) {
+      Object.assign(mongoQuery, baeOrConditions[0]);
+    } else if (baeOrConditions.length > 1) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({ $or: baeOrConditions });
+    }
+
+    if (query && query.trim()) {
+      if (searchMode === 'exact') {
+        mongoQuery.numero = new RegExp(`^${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      } else {
+        const searchRegex = new RegExp(query.trim(), 'i');
+        const textOr = [
+          { numero: searchRegex },
+          { titulo: searchRegex },
+          { sumario: searchRegex },
+          { aiSummary: searchRegex },
+          { aiTags: searchRegex },
+        ];
+        if (mongoQuery.$or) {
+          mongoQuery.$and = mongoQuery.$and || [];
+          mongoQuery.$and.push({ $or: textOr });
+        } else {
+          mongoQuery.$or = textOr;
+        }
+      }
+    }
+
+    if (tipo) mongoQuery.tipo = tipo;
+    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (baeSourceOnly) mongoQuery.baeSource = true;
+
+    if (legisladorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({
+        $or: [
+          { 'autor.legisladorId': legisladorId },
+          { 'coautores.legisladorId': legisladorId },
+        ],
+      });
+    }
+
+    if (autorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({ 'autor.legisladorId': autorId });
+    }
+
+    if (coautorId) {
+      mongoQuery.$and = mongoQuery.$and || [];
+      mongoQuery.$and.push({ 'coautores.legisladorId': coautorId });
+    }
+
+    if (bloqueId) {
+      const legsInBloque = await this.legisladorModel.find({ bloqueId }, { legisladorId: 1 }).lean();
+      const legIds = legsInBloque.map((l) => l.legisladorId);
+      if (legIds.length) {
+        mongoQuery.$and = mongoQuery.$and || [];
+        mongoQuery.$and.push({
+          $or: [
+            { 'autor.legisladorId': { $in: legIds } },
+            { 'coautores.legisladorId': { $in: legIds } },
+          ],
+        });
+      }
+    }
+
+    const [expedientes, total] = await Promise.all([
+      this.expedienteModel
+        .find(mongoQuery)
+        .sort({ baeOrden: 1, fechaIngresoDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.expedienteModel.countDocuments(mongoQuery),
+    ]);
+
+    return { expedientes, total };
   }
 
   /**

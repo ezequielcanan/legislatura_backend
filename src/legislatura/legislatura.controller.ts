@@ -317,6 +317,33 @@ export class LegislaturaController {
     }
   }
 
+  @Get('bae/combined')
+  @ApiOperation({ summary: 'Get expedientes from multiple BAEs combined' })
+  @ApiQuery({ name: 'baes', required: true, description: 'Comma-separated BAE refs (nroOrden-anoParlamentario), e.g. 5-2025,4-2025' })
+  async getCombinedBaeExpedientes(
+    @Query('baes') baesParam: string,
+    @Query() filters: SearchExpedientesDto,
+  ) {
+    try {
+      if (!baesParam) {
+        throw new HttpException('baes parameter is required', HttpStatus.BAD_REQUEST);
+      }
+      const baeRefs = baesParam.split(',').map((ref) => {
+        const [nro, ano] = ref.trim().split('-').map(Number);
+        if (isNaN(nro) || isNaN(ano)) {
+          throw new HttpException(`Invalid BAE reference: ${ref}`, HttpStatus.BAD_REQUEST);
+        }
+        return { nroOrden: nro, anoParlamentario: ano };
+      });
+
+      const result = await this.legislaturaService.getCombinedBaesExpedientes(baeRefs, filters);
+      return { success: true, ...result };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get('bae/:nroOrden/:anoParlamentario')
   @ApiOperation({ summary: 'Get BAE with its expedientes (supports same filters as expedientes)' })
   async getBaeWithExpedientes(

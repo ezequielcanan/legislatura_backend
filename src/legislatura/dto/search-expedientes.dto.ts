@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsDateString, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsDateString, IsInt, IsBoolean, IsIn, Min, Max } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SearchExpedientesDto {
@@ -78,6 +78,18 @@ export class SearchExpedientesDto {
   @Type(() => Number)
   @IsInt()
   anoParlamentario?: number;
+
+  @ApiProperty({ required: false, description: 'Search mode: text (default regex) or exact (match numero exactly)' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['text', 'exact'])
+  searchMode?: string;
+
+  @ApiProperty({ required: false, description: 'Filter only expedientes that are propio del BAE (baeSource=true)' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  baeSourceOnly?: boolean;
 
   @ApiProperty({ required: false, default: 50, minimum: 1, maximum: 200 })
   @IsOptional()
