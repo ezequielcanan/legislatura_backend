@@ -178,7 +178,7 @@ export class LegislaturaService {
   }
 
   async getLegisladores(bloqueId?: number): Promise<LegisladorDocument[]> {
-    const filter: any = {};
+    const filter: any = { activo: true };
     if (bloqueId) filter.bloqueId = bloqueId;
     return this.legisladorModel.find(filter).sort({ apellido: 1 }).lean().exec();
   }
