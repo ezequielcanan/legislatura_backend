@@ -30,7 +30,7 @@ export class LegislaturaScheduler {
     //name: 'legislaturaTodaySync',
     //timeZone: 'America/Argentina/Buenos_Aires',
   //})
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async handleTodaySync() {
     if (!this.enabled) {
       this.logger.debug('Legislatura sync disabled');
