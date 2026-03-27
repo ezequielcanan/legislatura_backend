@@ -154,6 +154,22 @@ export class LegislaturaController {
     }
   }
 
+  @Post('expedientes/:id/resync')
+  @ApiOperation({ summary: 'Re-process a single expediente (download PDF + AI summary + embeddings)' })
+  async resyncExpediente(@Param('id') id: string) {
+    const expedienteId = parseInt(id);
+    if (isNaN(expedienteId)) {
+      throw new HttpException('Invalid expediente ID', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const expediente = await this.legislaturaService.processExpediente(expedienteId);
+      return { success: true, data: expediente };
+    } catch (error) {
+      this.logger.error(`Resync failed for expediente ${expedienteId}: ${error.message}`);
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get('legisladores/:id/expedientes')
   @ApiOperation({ summary: 'Get expedientes by legislador' })
   async getExpedientesByLegislador(@Param('id') id: string) {
