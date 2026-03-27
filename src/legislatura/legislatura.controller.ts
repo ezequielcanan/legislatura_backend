@@ -163,7 +163,7 @@ export class LegislaturaController {
     }
     try {
       const expediente = await this.legislaturaService.processExpediente(expedienteId);
-      return { success: true, data: expediente };
+      return { success: true, data: expediente.toObject() };
     } catch (error) {
       this.logger.error(`Resync failed for expediente ${expedienteId}: ${error.message}`);
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
