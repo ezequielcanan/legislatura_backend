@@ -529,7 +529,7 @@ export class LegislaturaService {
       }
 
       return { newExpedientes: newCount, totalFound: expedientes.length };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Error syncing expedientes:', error.message);
       await this.syncModel.updateOne(
         { syncKey: 'main' },
@@ -733,7 +733,7 @@ export class LegislaturaService {
             this.logger.log(
               `Expediente ${expedienteId} indexed via Python RAG: ${embeddingCount} chunks in ${indexResult.elapsed_ms}ms`,
             );
-          } catch (err) {
+          } catch (err: any) {
             this.logger.warn(
               `Python RAG indexing failed for ${expedienteId}, falling back to MongoDB: ${err.message}`,
             );
@@ -759,7 +759,7 @@ export class LegislaturaService {
 
       this.logger.log(`Expediente ${expedienteId} processed successfully`);
       return expediente;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error processing expediente ${expedienteId}:`, error.message);
       expediente.status = ExpedienteStatus.FAILED;
       expediente.errorMessage = error.message;
@@ -846,7 +846,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         };
       }
       return { summary: expediente.sumario, tags: [], category: 'otro' };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`AI summary/tag generation failed for ${expediente.expedienteId}: ${error.message}`);
       return { summary: expediente.sumario, tags: [], category: 'otro' };
     }
@@ -898,7 +898,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
           lastIndexedAt: new Date(),
         });
         embeddingCount++;
-      } catch (err) {
+      } catch (err: any) {
         this.logger.warn(`Failed to create summary embedding for ${expedienteId}: ${err.message}`);
       }
     }
@@ -947,7 +947,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
             lastIndexedAt: new Date(),
           });
           embeddingCount++;
-        } catch (err) {
+        } catch (err: any) {
           throw new Error(`Failed to create embedding chunk ${i} for expediente ${expedienteId}: ${err.message}`);
         }
       }
@@ -1024,7 +1024,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       const legIds = legsInBloque.map((l) => l.legisladorId);
 
       if (legIds.length) {
-        authorOrConditions.push({ $or: [{ 'autor.legisladorId': { $in: legIds } }, { 'coautores.legisladorId': { $in: legIds } }] });
+        authorOrConditions.push({ $or: [{ 'autor.legisladorId': { $in: legIds } }] });
       } else {
       }
     }
@@ -1061,6 +1061,117 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
 
   async getExpedienteById(expedienteId: number): Promise<ExpedienteDocument | null> {
     return this.expedienteModel.findOne({ expedienteId }).lean().exec();
+  }
+
+  /**
+   * Check if an expediente has been sanctioned using the parliamentary API.
+   */
+  async getExpedienteSancion(expedienteId: number): Promise<{ sancionado: boolean; tipo?: string; fechaSesion?: string }> {
+    try {
+      const response = await this.getXml(
+        `${API_BASE}/webservices/Json.asmx/GetExpedienteSancionAprobacionVeto?IdExpediente=${expedienteId}`,
+      );
+      const parsed = this.xmlParser.parse(response);
+      const sanciones = this.ensureArray(parsed?.ArrayOfExpedienteSancionAprobacionVeto?.expedienteSancionAprobacionVeto);
+      if (sanciones.length > 0) {
+        return {
+          sancionado: true,
+          tipo: sanciones[0].sancion_aprobacion_tipo_des || '',
+          fechaSesion: sanciones[0].fch_sesion || '',
+        };
+      }
+      return { sancionado: false };
+    } catch (error: any) {
+      this.logger.warn(`Failed to check sancion for expediente ${expedienteId}: ${error.message}`);
+      return { sancionado: false };
+    }
+  }
+
+  /**
+   * Fetch the current (or most recent) bloque name for a legislador directly from the parliamentary API.
+   * Used as fallback when the bloque is not stored in our local DB (old/inactive legislators).
+   */
+  async getLegisladorBloqueFromAPI(legisladorId: number): Promise<string> {
+    try {
+      const response = await this.getXml(
+        `${API_BASE}/webservices/Json.asmx/GetLegisladoresBloques?id_legislador=${legisladorId}`,
+      );
+      const parsed = this.xmlParser.parse(response);
+      const listado = parsed?.RespuestaOfLegisladorBloque?.Listado;
+      if (!listado) return '';
+      const items = this.ensureArray(listado.LegisladorBloque);
+      if (items.length === 0) return '';
+      // The 'bloque' field contains the bloque name
+      return items[items.length - 1].bloque || '';
+    } catch (error: any) {
+      this.logger.warn(`Failed to fetch API bloque for legislador ${legisladorId}: ${error.message}`);
+      return '';
+    }
+  }
+
+  /**
+   * Batch: get sancion status + autor's bloque for multiple expedientes.
+   * Used for Excel export.
+   */
+  async getExportData(expedienteIds: number[]): Promise<Record<number, { sancionado: boolean; bloque: string }>> {
+    const result: Record<number, { sancionado: boolean; bloque: string }> = {};
+
+    // Get all expedientes to find their authors
+    const expedientes = await this.expedienteModel
+      .find({ expedienteId: { $in: expedienteIds } }, { expedienteId: 1, 'autor.legisladorId': 1 })
+      .lean()
+      .exec();
+
+    // Collect unique legislador IDs
+    const legisladorIds = [...new Set(
+      expedientes
+        .map((e) => e.autor?.legisladorId)
+        .filter((id): id is number => id != null),
+    )];
+
+    // Bulk-fetch legisladores to get bloque names from our DB
+    const legisladores = await this.legisladorModel
+      .find({ legisladorId: { $in: legisladorIds } }, { legisladorId: 1, bloque: 1 })
+      .lean()
+      .exec();
+    const legBloqueMap = new Map<number, string>();
+    for (const l of legisladores) {
+      legBloqueMap.set(l.legisladorId, l.bloque || '');
+    }
+
+    // For legisladores with missing bloque, fetch from the parliamentary API
+    const missingBloqueIds = legisladorIds.filter((id) => !legBloqueMap.get(id));
+    if (missingBloqueIds.length > 0) {
+      this.logger.log(`Fetching bloque from API for ${missingBloqueIds.length} legisladores with missing bloque`);
+      const BLOQUE_CONCURRENCY = 5;
+      for (let i = 0; i < missingBloqueIds.length; i += BLOQUE_CONCURRENCY) {
+        const batch = missingBloqueIds.slice(i, i + BLOQUE_CONCURRENCY);
+        const results = await Promise.all(batch.map((id) => this.getLegisladorBloqueFromAPI(id)));
+        for (let j = 0; j < batch.length; j++) {
+          if (results[j]) legBloqueMap.set(batch[j], results[j]);
+        }
+      }
+    }
+
+    // Check sanciones in parallel with concurrency limit
+    const CONCURRENCY = 5;
+    for (let i = 0; i < expedienteIds.length; i += CONCURRENCY) {
+      const batch = expedienteIds.slice(i, i + CONCURRENCY);
+      const sancionResults = await Promise.all(
+        batch.map((id) => this.getExpedienteSancion(id)),
+      );
+      for (let j = 0; j < batch.length; j++) {
+        const expId = batch[j];
+        const exp = expedientes.find((e) => e.expedienteId === expId);
+        const autorLegId = exp?.autor?.legisladorId;
+        result[expId] = {
+          sancionado: sancionResults[j].sancionado,
+          bloque: autorLegId ? legBloqueMap.get(autorLegId) || '' : '',
+        };
+      }
+    }
+
+    return result;
   }
 
   async getExpedientesByLegislador(legisladorId: number): Promise<ExpedienteDocument[]> {
@@ -1153,7 +1264,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         url: l.id_libroWS || '',
         tipo: l.tipo || '',
       }));
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch libros for expediente ${expedienteId}: ${error.message}`);
       return [];
     }
@@ -1169,7 +1280,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       );
       const parsed = this.xmlParser.parse(response.data);
       return parsed?.RespuestaOfVotacionExpediente?.Listado || null;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch votaciones for expediente ${expedienteId}: ${error.message}`);
       return null;
     }
@@ -1186,7 +1297,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       const parsed = this.xmlParser.parse(response.data);
       const ubicaciones = this.ensureArray(parsed?.ArrayOfExpedienteUbicacionActual?.expedienteUbicacionActual);
       return ubicaciones[0]?.ubicacion_des || '';
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch ubicacion actual for expediente ${expedienteId}: ${error.message}`);
       return '';
     }
@@ -1210,7 +1321,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         orden: parseInt(g.orden) || 0,
         giroTipoDes: g.expediente_giro_tipo_des || '',
       }));
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch giros for expediente ${expedienteId}: ${error.message}`);
       return [];
     }
@@ -1257,7 +1368,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
           { $set: updateFields },
         );
         updated++;
-      } catch (err) {
+      } catch (err: any) {
         this.logger.warn(`Failed to sync giros/ubicacion for expediente ${exp.expedienteId}: ${err.message}`);
       }
     }
@@ -1273,7 +1384,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       const result = await parser.getText({ global: true });
       await parser.destroy();
       return result.text;
-    } catch (pdfError) {
+    } catch (pdfError: any) {
       this.logger.warn(`PDF extraction failed for ${url}, trying Word format: ${pdfError.message}`);
 
       // Try as Word document
@@ -1288,7 +1399,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         const result = await mammoth.extractRawText({ buffer: response.data });
         this.logger.log(`Successfully extracted text from Word document: ${url}`);
         return result.value;
-      } catch (wordError) {
+      } catch (wordError: any) {
         throw new Error(`Failed to extract text from PDF: ${pdfError.message}. Also failed as Word: ${wordError.message}`);
       }
     }
@@ -1298,6 +1409,16 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     const response = await firstValueFrom(
       this.httpService.post(url, body, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 30000,
+        responseType: 'text',
+      }),
+    );
+    return typeof response.data === 'string' ? response.data : String(response.data);
+  }
+
+  private async getXml(url: string): Promise<string> {
+    const response = await firstValueFrom(
+      this.httpService.get(url, {
         timeout: 30000,
         responseType: 'text',
       }),
@@ -1385,7 +1506,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
       const baes = this.ensureArray(parsed?.ArrayOfBae?.bae);
       return baes[0] || null;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch BAE header ${nroOrden}-${anoParlamentario}: ${error.message}`);
       return null;
     }
@@ -1405,7 +1526,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
       const items = this.ensureArray(parsed?.ArrayOfExpedienteBasicos?.expedienteBasicos);
       return items[0] || null;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch datos basicos for expediente ${expedienteId}: ${error.message}`);
       return null;
     }
@@ -1424,7 +1545,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       );
       const parsed = this.xmlParser.parse(typeof response.data === 'string' ? response.data : String(response.data));
       return this.ensureArray(parsed?.ArrayOfBaeItems?.baeItems);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch BAE items ${nroOrden}-${anoParlamentario}: ${error.message}`);
       return [];
     }
@@ -1654,7 +1775,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         const result = await this.syncBae(nroOrden, anoParlamentario);
         totalBaes++;
         totalNewExpedientes += result.newExpedientes;
-      } catch (err) {
+      } catch (err: any) {
         this.logger.error(`Error syncing BAE ${nroOrden}-${anoParlamentario}: ${err.message}`);
       }
 
@@ -1739,7 +1860,6 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
         mongoQuery.$and.push({
           $or: [
             { 'autor.legisladorId': { $in: legIds } },
-            { 'coautores.legisladorId': { $in: legIds } },
           ],
         });
       }

@@ -34,7 +34,7 @@ export class LegislaturaController {
     try {
       const bloques = await this.legislaturaService.getBloques();
       return { success: true, data: bloques };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -45,7 +45,7 @@ export class LegislaturaController {
     try {
       const data = await this.legislaturaService.getBloquesWithCounts();
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -61,7 +61,7 @@ export class LegislaturaController {
         bloqueId ? parseInt(bloqueId) : undefined,
       );
       return { success: true, data: legisladores };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -72,7 +72,7 @@ export class LegislaturaController {
     try {
       const legisladores = await this.legislaturaService.getLegisladoresInactivos();
       return { success: true, data: legisladores };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -83,7 +83,7 @@ export class LegislaturaController {
     try {
       const legislador = await this.legislaturaService.getLegisladorDetail(parseInt(id));
       return { success: true, data: legislador };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.NOT_FOUND);
     }
   }
@@ -96,7 +96,7 @@ export class LegislaturaController {
     try {
       const autores = await this.legislaturaService.getDistinctAutores(filters);
       return { success: true, data: autores };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -107,7 +107,7 @@ export class LegislaturaController {
     try {
       const coautores = await this.legislaturaService.getDistinctCoautores(filters);
       return { success: true, data: coautores };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -118,7 +118,41 @@ export class LegislaturaController {
     try {
       const result = await this.legislaturaService.searchExpedientes(filters);
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('expedientes/export-data')
+  @ApiOperation({ summary: 'Get sancion status and bloque for expedientes (for Excel export)' })
+  @ApiQuery({ name: 'ids', required: true, type: String, description: 'Comma-separated expediente IDs' })
+  async getExportData(@Query('ids') ids: string) {
+    try {
+      const expedienteIds = ids
+        .split(',')
+        .map((id) => parseInt(id.trim()))
+        .filter((id) => !isNaN(id));
+      if (expedienteIds.length === 0) {
+        throw new HttpException('No valid IDs provided', HttpStatus.BAD_REQUEST);
+      }
+      if (expedienteIds.length > 5000) {
+        throw new HttpException('Maximum 5000 IDs allowed', HttpStatus.BAD_REQUEST);
+      }
+      const data = await this.legislaturaService.getExportData(expedienteIds);
+      return { success: true, data };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Get('expedientes/sancion/:id')
+  @ApiOperation({ summary: 'Check sancion status for a single expediente' })
+  async getExpedienteSancion(@Param('id') id: string) {
+    try {
+      const data = await this.legislaturaService.getExpedienteSancion(parseInt(id));
+      return { success: true, data };
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -138,7 +172,7 @@ export class LegislaturaController {
         dateTo.toISOString(),
       );
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -149,7 +183,7 @@ export class LegislaturaController {
     try {
       const expediente = await this.legislaturaService.getExpedienteById(parseInt(id));
       return { success: true, data: expediente };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.NOT_FOUND);
     }
   }
@@ -164,7 +198,7 @@ export class LegislaturaController {
     try {
       const expediente = await this.legislaturaService.processExpediente(expedienteId);
       return { success: true, data: expediente.toObject() };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Resync failed for expediente ${expedienteId}: ${error.message}`);
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -176,7 +210,7 @@ export class LegislaturaController {
     try {
       const expedientes = await this.legislaturaService.getExpedientesByLegislador(parseInt(id));
       return { success: true, data: expedientes };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -192,7 +226,7 @@ export class LegislaturaController {
     try {
       const result = await this.legislaturaService.syncBloques();
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -208,7 +242,7 @@ export class LegislaturaController {
       // Also ensure legisladores from expedientes are inserted
       const ensureResult = await this.legislaturaService.ensureLegisladoresFromExpedientes();
       return { success: true, ...result, insertedInactive: ensureResult.inserted };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -222,7 +256,7 @@ export class LegislaturaController {
     try {
       const result = await this.legislaturaService.syncTodayExpedientes();
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -242,7 +276,7 @@ export class LegislaturaController {
       }
       const result = await this.legislaturaService.syncExpedientesByDateRange(from, to);
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -263,7 +297,7 @@ export class LegislaturaController {
         legisladores,
         expedientes,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -276,7 +310,7 @@ export class LegislaturaController {
     try {
       const comisiones = this.legislaturaService.getComisiones();
       return { success: true, data: comisiones };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -289,7 +323,7 @@ export class LegislaturaController {
     try {
       const stats = await this.legislaturaService.getStats();
       return { success: true, data: stats };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -312,7 +346,7 @@ export class LegislaturaController {
       const o = offset ? parseInt(offset) : 0;
       const result = await this.legislaturaService.syncGirosForRecentExpedientes(m, o);
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -328,7 +362,7 @@ export class LegislaturaController {
         anoParlamentario ? parseInt(anoParlamentario) : undefined,
       );
       return { success: true, data };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -354,7 +388,7 @@ export class LegislaturaController {
 
       const result = await this.legislaturaService.getCombinedBaesExpedientes(baeRefs, filters);
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -374,7 +408,7 @@ export class LegislaturaController {
         filters,
       );
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -401,7 +435,7 @@ export class LegislaturaController {
         parseInt(anoParlamentario),
       );
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -415,7 +449,7 @@ export class LegislaturaController {
     try {
       const result = await this.legislaturaService.syncLatestBae();
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -435,7 +469,7 @@ export class LegislaturaController {
       }
       const result = await this.legislaturaService.syncBaesByYear(parseInt(anoParlamentario));
       return { success: true, ...result };
-    } catch (error) {
+    } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }

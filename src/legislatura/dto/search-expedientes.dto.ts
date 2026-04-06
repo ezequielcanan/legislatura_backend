@@ -96,12 +96,12 @@ export class SearchExpedientesDto {
   @IsBoolean()
   baeSourceOnly?: boolean;
 
-  @ApiProperty({ required: false, default: 50, minimum: 1, maximum: 200 })
+  @ApiProperty({ required: false, default: 50, minimum: 1, maximum: 2000 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(2000)
   limit?: number = 50;
 
   @ApiProperty({ required: false, default: 0, minimum: 0 })
