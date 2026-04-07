@@ -168,9 +168,13 @@ export class LegislaturaScheduler {
 
     try {
       this.logger.log('Starting daily giros+ubicacion sync...');
-      const result = await this.legislaturaService.syncGirosForRecentExpedientes(6, 0);
-      this.logger.log(`Giros+ubicacion sync completed: ${result.updated}/${result.total} expedientes updated`);
-    } catch (error) {
+      const girosResult = await this.legislaturaService.syncGirosForRecentExpedientes(6, 0);
+      this.logger.log(`Giros+ubicacion sync completed: ${girosResult.updated}/${girosResult.total} expedientes updated`);
+
+      this.logger.log('Starting missing sumario re-sync...');
+      const sumarioResult = await this.legislaturaService.syncMissingSumariosForRecentExpedientes(6, 0);
+      this.logger.log(`Missing sumario sync completed: ${sumarioResult.updated}/${sumarioResult.total} expedientes updated`);
+    } catch (error: any) {
       this.logger.error('Daily giros+ubicacion sync failed:', error.message);
     }
   }

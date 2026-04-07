@@ -1426,6 +1426,109 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     return { updated, total: expedientes.length };
   }
 
+  /**
+   * Re-sync basic expediente data (titulo, sumario, estado, estadoId, ubicacion, ubicacionId)
+   * for expedientes that have an empty or missing sumario within a date window.
+   * Groups by fechaIngreso to minimise API calls: one GetExpedienteAvanzada call per unique date.
+   */
+  async syncMissingSumariosForRecentExpedientes(months: number = 6, offsetMonths: number = 0): Promise<{ updated: number; total: number }> {
+    const endDate = new Date();
+    if (offsetMonths > 0) {
+      endDate.setMonth(endDate.getMonth() - offsetMonths);
+    }
+    const startDate = new Date(endDate);
+    startDate.setMonth(startDate.getMonth() - months);
+
+    // Find expedientes with empty or missing sumario inside the date window
+    const expedientes = await this.expedienteModel
+      .find(
+        {
+          fechaIngresoDate: { $gte: startDate, $lte: endDate },
+          $or: [{ sumario: { $exists: false } }, { sumario: null }, { sumario: '' }],
+        },
+        { expedienteId: 1, fechaIngreso: 1 },
+      )
+      .lean()
+      .exec();
+
+    if (expedientes.length === 0) {
+      this.logger.log('No expedientes with missing sumario found in the date window');
+      return { updated: 0, total: 0 };
+    }
+
+    this.logger.log(`Found ${expedientes.length} expedientes with missing sumario to re-sync`);
+
+    // Group by fechaIngreso date string (DD/MM/YYYY — matches the API's FechaDesde/FechaHasta format)
+    const byDate = new Map<string, number[]>();
+    for (const exp of expedientes) {
+      const dateKey = exp.fechaIngreso || '';
+      if (!dateKey) continue;
+      if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+      byDate.get(dateKey)!.push(exp.expedienteId);
+    }
+
+    let updated = 0;
+    for (const [dateKey, expIds] of byDate) {
+      try {
+        const body = [
+          'IdProyectoTipo=',
+          'IdAutoresInternos=',
+          'IdUbicacion=',
+          'IdEstado=',
+          'Sumario=',
+          'SumarioExacto=0',
+          `FechaDesde=${dateKey}`,
+          `FechaHasta=${dateKey}`,
+          'AnioParlamentario=',
+          'Limite=',
+        ].join('&');
+
+        const response = await this.postXml(
+          `${API_BASE}/webservices/Json.asmx/GetExpedienteAvanzada`,
+          body,
+        );
+        const parsed = this.xmlParser.parse(response);
+        const apiExpedientes = this.ensureArray(parsed?.ArrayOfExpedienteAvanzado?.expedienteAvanzado);
+
+        // Build lookup map: expedienteId -> raw API object
+        const apiMap = new Map<number, any>();
+        for (const e of apiExpedientes) {
+          apiMap.set(parseInt(e.id_expediente), e);
+        }
+
+        for (const expId of expIds) {
+          const apiData = apiMap.get(expId);
+          if (!apiData) {
+            this.logger.debug(`Expediente ${expId} not found in API response for date ${dateKey}`);
+            continue;
+          }
+          const newSumario = (apiData.sumario || '').trim();
+          if (!newSumario) continue; // API still returns empty — nothing to do
+
+          await this.expedienteModel.updateOne(
+            { expedienteId: expId },
+            {
+              $set: {
+                titulo: apiData.titulo || newSumario,
+                sumario: newSumario,
+                estado: apiData.descripcion || '',
+                estadoId: parseInt(apiData.id_estado) || 0,
+                ubicacion: apiData.ubicacion_des || '',
+                ubicacionId: parseInt(apiData.id_ubicacion) || 0,
+              },
+            },
+          );
+          updated++;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to sync missing sumarios for date ${dateKey}: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`Missing sumario sync completed: ${updated}/${expedientes.length} updated`);
+    return { updated, total: expedientes.length };
+  }
+
   private async extractTextFromPDF(url: string): Promise<string> {
     // First, try as PDF
     try {

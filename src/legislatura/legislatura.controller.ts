@@ -271,6 +271,50 @@ export class LegislaturaController {
     }
   }
 
+  @Post('sync/giros')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Re-sync giros (comisiones) and ubicacion for recent expedientes' })
+  @ApiQuery({ name: 'months', required: false, type: Number, description: 'Date window in months (default 6)' })
+  @ApiQuery({ name: 'offsetMonths', required: false, type: Number, description: 'Shift window back by N months (default 0)' })
+  async triggerSyncGiros(
+    @Query('months') months?: string,
+    @Query('offsetMonths') offsetMonths?: string,
+  ) {
+    try {
+      const result = await this.legislaturaService.syncGirosForRecentExpedientes(
+        months ? parseInt(months) : 6,
+        offsetMonths ? parseInt(offsetMonths) : 0,
+      );
+      return { success: true, ...result };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  @Post('sync/sumarios')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Re-sync missing sumarios (titulo, sumario, estado, ubicacion) for recent expedientes' })
+  @ApiQuery({ name: 'months', required: false, type: Number, description: 'Date window in months (default 6)' })
+  @ApiQuery({ name: 'offsetMonths', required: false, type: Number, description: 'Shift window back by N months (default 0)' })
+  async triggerSyncSumarios(
+    @Query('months') months?: string,
+    @Query('offsetMonths') offsetMonths?: string,
+  ) {
+    try {
+      const result = await this.legislaturaService.syncMissingSumariosForRecentExpedientes(
+        months ? parseInt(months) : 6,
+        offsetMonths ? parseInt(offsetMonths) : 0,
+      );
+      return { success: true, ...result };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Post('sync/full')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -313,29 +357,6 @@ export class LegislaturaController {
     try {
       const stats = await this.legislaturaService.getStats();
       return { success: true, data: stats };
-    } catch (error: any) {
-      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  // ─── Sync Giros (admin) ──────────────────────────
-
-  @Post('sync/giros')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Trigger manual giros+ubicacion sync for recent expedientes' })
-  @ApiQuery({ name: 'months', required: false, type: Number, description: 'Window size in months (default 6)' })
-  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Offset months from now (default 0)' })
-  async triggerSyncGiros(
-    @Query('months') months?: string,
-    @Query('offset') offset?: string,
-  ) {
-    try {
-      const m = months ? parseInt(months) : 6;
-      const o = offset ? parseInt(offset) : 0;
-      const result = await this.legislaturaService.syncGirosForRecentExpedientes(m, o);
-      return { success: true, ...result };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
