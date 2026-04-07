@@ -1110,6 +1110,55 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
   }
 
   /**
+   * Filter-based export: search expedientes using filters, then fetch sancion + bloque data.
+   * Used for Excel export — avoids passing thousands of IDs in the URL.
+   */
+  async getExportDataByFilters(filters: SearchExpedientesDto): Promise<{
+    expedientes: ExpedienteDocument[];
+    exportData: Record<number, { sancionado: boolean; bloque: string }>;
+    total: number;
+  }> {
+    const exportFilters = { ...filters, limit: 5000, skip: 0 };
+
+    let expedientes: ExpedienteDocument[];
+    let total: number;
+
+    if (exportFilters.baes) {
+      // Combined BAE search
+      const baeRefs = exportFilters.baes.split(',').map((ref) => {
+        const [nro, ano] = ref.split('-').map(Number);
+        return { nroOrden: nro, anoParlamentario: ano };
+      });
+      const result = await this.getCombinedBaesExpedientes(baeRefs, exportFilters);
+      expedientes = result.expedientes;
+      total = result.total;
+    } else if (exportFilters.nroOrden && exportFilters.anoParlamentario) {
+      // Single BAE search
+      const result = await this.getBaeWithExpedientes(
+        exportFilters.nroOrden,
+        exportFilters.anoParlamentario,
+        exportFilters,
+      );
+      expedientes = result.expedientes;
+      total = result.total;
+    } else {
+      // Proyectos search
+      const result = await this.searchExpedientes(exportFilters);
+      expedientes = result.expedientes;
+      total = result.total;
+    }
+
+    if (expedientes.length === 0) {
+      return { expedientes: [], exportData: {}, total: 0 };
+    }
+
+    const expedienteIds = expedientes.map((e) => e.expedienteId);
+    const exportData = await this.getExportData(expedienteIds);
+
+    return { expedientes, exportData, total };
+  }
+
+  /**
    * Batch: get sancion status + autor's bloque for multiple expedientes.
    * Used for Excel export.
    */

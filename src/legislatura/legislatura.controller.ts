@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -123,23 +124,12 @@ export class LegislaturaController {
     }
   }
 
-  @Get('expedientes/export-data')
-  @ApiOperation({ summary: 'Get sancion status and bloque for expedientes (for Excel export)' })
-  @ApiQuery({ name: 'ids', required: true, type: String, description: 'Comma-separated expediente IDs' })
-  async getExportData(@Query('ids') ids: string) {
+  @Post('expedientes/export-data')
+  @ApiOperation({ summary: 'Get expedientes with sancion status and bloque for Excel export (filter-based)' })
+  async getExportData(@Body() filters: SearchExpedientesDto) {
     try {
-      const expedienteIds = ids
-        .split(',')
-        .map((id) => parseInt(id.trim()))
-        .filter((id) => !isNaN(id));
-      if (expedienteIds.length === 0) {
-        throw new HttpException('No valid IDs provided', HttpStatus.BAD_REQUEST);
-      }
-      if (expedienteIds.length > 5000) {
-        throw new HttpException('Maximum 5000 IDs allowed', HttpStatus.BAD_REQUEST);
-      }
-      const data = await this.legislaturaService.getExportData(expedienteIds);
-      return { success: true, data };
+      const data = await this.legislaturaService.getExportDataByFilters(filters);
+      return { success: true, ...data };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
