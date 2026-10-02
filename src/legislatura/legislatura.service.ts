@@ -253,7 +253,7 @@ export class LegislaturaService {
     filters: SearchExpedientesDto,
     options: { skipAutorCoautor?: boolean } = {},
   ): Promise<any> {
-    const { query, tipo, estado, comisionUrl, bloqueId, tag, category, dateFrom, dateTo, nroOrden, anoParlamentario } = filters;
+    const { query, tipo, estado, idComision, bloqueId, tag, category, dateFrom, dateTo, nroOrden, anoParlamentario } = filters;
     const mongoQuery: any = {};
 
     if (query && query.trim()) {
@@ -268,7 +268,7 @@ export class LegislaturaService {
     }
     if (tipo) mongoQuery.tipo = tipo;
     if (estado) mongoQuery.estado = estado;
-    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (idComision) mongoQuery['comisiones.idComision'] = idComision;
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
 
@@ -966,7 +966,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       query,
       tipo,
       estado,
-      comisionUrl,
+      idComision,
       bloqueId,
       legisladorId,
       autorId,
@@ -1000,7 +1000,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
 
     if (tipo) mongoQuery.tipo = tipo;
     if (estado) mongoQuery.estado = estado;
-    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (idComision) mongoQuery['comisiones.idComision'] = idComision;
     if (tag) mongoQuery.aiTags = tag;
     if (category) mongoQuery.aiCategory = category;
     if (baeSourceOnly) mongoQuery.baeSource = true;
@@ -1960,7 +1960,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
       .lean()
       .exec();
 
-    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
+    const { query, tipo, idComision, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
     const mongoQuery: any = {
       'baeReferences': { $elemMatch: { nroOrden, anoParlamentario } },
     };
@@ -1981,7 +1981,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     }
 
     if (tipo) mongoQuery.tipo = tipo;
-    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (idComision) mongoQuery['comisiones.idComision'] = idComision;
     if (baeSourceOnly) mongoQuery.baeSource = true;
 
     if (legisladorId) {
@@ -2038,7 +2038,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     baeRefs: Array<{ nroOrden: number; anoParlamentario: number }>,
     filters: SearchExpedientesDto = {},
   ): Promise<{ expedientes: ExpedienteDocument[]; total: number }> {
-    const { query, tipo, comisionUrl, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
+    const { query, tipo, idComision, bloqueId, legisladorId, autorId, coautorId, searchMode, baeSourceOnly, limit = 50, skip = 0 } = filters;
 
     const baeOrConditions = baeRefs.map((ref) => ({
       'baeReferences': { $elemMatch: { nroOrden: ref.nroOrden, anoParlamentario: ref.anoParlamentario } },
@@ -2074,7 +2074,7 @@ Respondé ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones adiciona
     }
 
     if (tipo) mongoQuery.tipo = tipo;
-    if (comisionUrl) mongoQuery['comisiones.comisionUrl'] = comisionUrl;
+    if (idComision) mongoQuery['comisiones.idComision'] = idComision;
     if (baeSourceOnly) mongoQuery.baeSource = true;
 
     if (legisladorId) {

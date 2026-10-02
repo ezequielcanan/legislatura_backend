@@ -389,6 +389,7 @@ export class LegislaturaController {
       if (!baesParam) {
         throw new HttpException('baes parameter is required', HttpStatus.BAD_REQUEST);
       }
+      console.log(filters)
       const baeRefs = baesParam.split(',').map((ref) => {
         const [nro, ano] = ref.trim().split('-').map(Number);
         if (isNaN(nro) || isNaN(ano)) {

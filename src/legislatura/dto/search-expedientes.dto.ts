@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsDateString, IsInt, IsBoolean, IsIn, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsDateString, IsInt, IsBoolean, IsIn, Min, Max, IsNumber } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -18,10 +18,11 @@ export class SearchExpedientesDto {
   @IsString()
   estado?: string;
 
-  @ApiProperty({ required: false, description: 'Filter by comision URL (e.g. comision/salud)' })
+  @ApiProperty({ required: false, description: 'Filter by comision ID (e.g. comision/salud)' })
   @IsOptional()
-  @IsString()
-  comisionUrl?: string;
+  @Type(() => Number)
+  @IsInt()
+  idComision?: number;
 
   @ApiProperty({ required: false, description: 'Filter by bloque ID' })
   @IsOptional()
